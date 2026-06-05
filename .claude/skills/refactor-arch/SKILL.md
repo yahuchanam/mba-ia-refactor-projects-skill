@@ -36,7 +36,7 @@ flowchart TD
 **Inviolable principle:** no writing/editing/deleting any target-project file before the
 confirmation gate. When in doubt **before the gate**, stop and ask. **After** the gate, Phase 3
 runs autonomously — resolve conflicts via its documented policies (see
-[3.0 Security precedence](#30-security-precedence-resolve-route-surface-conflicts-without-pausing)),
+[3.0 Security precedence](#30-security-precedence-secure-endpoints-in-place)),
 never by opening a new prompt.
 
 ## Tooling conventions (run without permission friction)
@@ -167,10 +167,11 @@ Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]
 **Precondition:** explicit `y` at the gate. Never start otherwise.
 
 **Goal:** restructure the project to MVC, removing the audited anti-patterns, **preserving
-behavior** — every original endpoint still responds, **except** endpoints removed or gated per
-the approved audit's CRITICAL security remediations (see [3.0 Security precedence](#30-security-precedence-resolve-route-surface-conflicts-without-pausing)).
-The refactor is split into tasks, executed by **parallel subagents in isolated git worktrees**,
-verified against the project's own toolchain, and **looped until the project is 100% functional**.
+behavior** — every original endpoint still responds. Security findings are fixed **in place**
+(see [3.0 Security precedence](#30-security-precedence-secure-endpoints-in-place)); the route
+surface from Phase 1 is **never reduced**. The refactor is split into tasks, executed by
+**parallel subagents in isolated git worktrees**, verified against the project's own toolchain,
+and **looped until the project is 100% functional**.
 
 > **Phase 3 is autonomous — it never opens a new HITL prompt.** The only human checkpoint is the
 > Phase 2 gate; approving the audit there authorizes applying **every** remediation it lists,
@@ -191,21 +192,21 @@ flowchart TD
     V -.->|any failure| P
 ```
 
-### 3.0 Security precedence (resolve route-surface conflicts without pausing)
+### 3.0 Security precedence (secure endpoints in place — never drop a route)
 
-When "preserve every endpoint" conflicts with a CRITICAL security remediation, **security wins** —
-apply the catalog's fix and record the change; do **not** stop to ask (the decision was made at
-the gate). Deterministic defaults:
+**Preserve every original endpoint.** A security finding is fixed by making the route **secure in
+place**, never by deleting it: the route surface from Phase 1 stays whole; only the implementation
+behind each route changes. Resolve every case deterministically — Phase 3 never pauses to ask:
 
-| Endpoint kind (CRITICAL finding) | Action |
+| Security finding | In-place fix (route preserved) |
 |---|---|
-| **Arbitrary code/SQL execution** (runs request-supplied code/SQL) | **Remove** — no safe equivalent exists; the catalog fix is "remove". |
-| **Destructive / privileged route without auth** (DB reset/wipe, admin ops) | **Gate** behind authentication + admin authorization ([`refactoring-playbook.md`](./refactoring-playbook.md) §13) so it still responds but is protected. If no auth foundation exists and none can be added in scope, **remove** it and move the capability to an offline script/seed tool. |
-| **Any other endpoint** | **Preserve** (same method + path → same status/shape). |
+| **SQL injection** — user input concatenated into a query | Rewrite with **parameterized / bound queries**. Same route and contract; input can no longer alter the SQL. |
+| **Endpoint that executes request-supplied SQL/code**, or a **destructive / admin action**, exposed **without access control** | Put it behind **authentication + admin authorization** ([`refactoring-playbook.md`](./refactoring-playbook.md) §13) so only an authenticated admin reaches it; the route keeps responding. Optionally constrain the operation (validate / allow-list) without changing its contract. |
+| **Other findings** — plaintext passwords, secret/PII exposure, mass-assignment, … | Fix in place per the playbook (salted hashing, output DTOs, allow-lists). Route unchanged. |
 
-Record each intentional deviation in the completion report under **Security-driven surface
-changes** (endpoint · action · finding). The route-surface checks in 3.5/3.6 treat these as
-**expected deltas**, not regressions — never as a reason to pause.
+After the fix, an auth-gated route still **responds**: the normal result for a valid admin
+credential, `401/403` otherwise. **The route surface (method + path) is never reduced.** Note in
+the completion report which routes were hardened (parameterized / auth-gated / hashed).
 
 ### 3.1 Discover the project's toolchain (stack-driven)
 
@@ -262,7 +263,7 @@ collide:
 - Create an isolated worktree per task (`git worktree add`), on its own branch.
 - The subagent refactors **only its slice**, following [`refactoring-playbook.md`](./refactoring-playbook.md)
   and the layer responsibilities in [`design-patterns-catalog.md`](./design-patterns-catalog.md);
-  it must **preserve the route surface** from Phase 1, minus the security-driven changes in [3.0](#30-security-precedence-resolve-route-surface-conflicts-without-pausing).
+  it must **preserve the route surface** from Phase 1 — security findings are fixed in place ([3.0](#30-security-precedence-secure-endpoints-in-place)), never by dropping a route.
 - Run the wave's subagents **concurrently**; wait for the whole wave to finish before the next
   (the wave boundary is the dependency barrier).
 
@@ -290,8 +291,9 @@ resolves conflicts, and removes the worktree. Keep changes incremental and revie
 After integrating a wave (and at the end), run the commands discovered in 3.1, in order:
 
 1. install deps → 2. **format** → 3. **lint** → 4. **build/compile** → 5. **test**.
-6. **Boot** the app and confirm **every original endpoint responds** (route surface from Phase 1,
-   minus the endpoints intentionally removed/gated per [3.0](#30-security-precedence-resolve-route-surface-conflicts-without-pausing)).
+6. **Boot** the app and confirm **every original endpoint responds** (full route surface from
+   Phase 1; for routes newly placed behind auth per [3.0](#30-security-precedence-secure-endpoints-in-place),
+   verify with a valid admin credential).
 
 Capture every failure with its output.
 
@@ -303,7 +305,7 @@ agent-in-the-loop — **for as many iterations as needed**. Declare completion o
 hold at once:
 
 - formatter clean · linter clean · build passes · tests pass
-- app boots · every original endpoint responds (minus endpoints removed/gated per [3.0](#30-security-precedence-resolve-route-surface-conflicts-without-pausing), documented in the report)
+- app boots · every original endpoint responds (full route surface; auth-gated routes with a valid admin credential)
 - no audited anti-pattern remains in the touched code
 
 Then print:
@@ -315,7 +317,7 @@ PHASE 3: REFACTORING COMPLETE
 Structure:   <new MVC layout>
 Toolchain:   format ✓ | lint ✓ | build ✓ | test ✓
 Validation:  app boots ✓ | endpoints respond ✓ | anti-patterns resolved ✓
-Security:    <N> endpoint(s) removed/gated per audit (or "none") — see report
+Security:    all endpoints preserved · vulnerabilities fixed in place (parameterized · auth-gated · hashed)
 ================================
 ```
 
