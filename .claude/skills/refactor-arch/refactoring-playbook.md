@@ -277,6 +277,67 @@ each dependency's deprecation notes and migrate to the documented replacement.
 
 ---
 
+## 13. Missing authentication/authorization → token/session + guard middleware
+
+Anti-pattern: *Broken authentication + privilege escalation*, *no real access control*.
+Principle: security; SRP (middleware).
+
+**Before**
+```
+handler("POST /login"):
+    user = repo.findByEmail(body.email)
+    if user and verify(user.secret, body.password):
+        return { ok: true }              # no token/session issued; caller stays anonymous
+
+handler("DELETE /products/:id"):         # any anonymous caller can reach this
+    repo.delete(id)
+```
+
+**After**
+```
+# on login: issue a signed, time-bound credential carrying identity + role
+handler("POST /login"):
+    user = service.authenticate(body.email, body.password)
+    return { token: issueToken({ sub: user.id, role: user.role }) }   # signed session/JWT
+
+# one authorization middleware guards sensitive / state-changing / admin routes
+middleware requireAuth(allowedRoles):
+    claims = verifyToken(request.authorization)   # reject if missing / invalid / expired
+    if allowedRoles and claims.role not in allowedRoles: deny(403)
+    request.identity = claims
+
+route("DELETE /products/:id", requireAuth(["admin"]), controller.delete)
+```
+**Why:** identity is verified per request and privileged actions are gated by role instead of
+left open. Keep public read endpoints public; protect mutating/admin routes. Credentials are
+signed and expiring; roles are assigned server-side — never read from the request body.
+
+---
+
+## 14. Unbounded list → pagination with safe defaults
+
+Anti-pattern: *Listing without pagination*. Principle: performance; robustness.
+
+**Before**
+```
+handler("GET /items"):
+    return repo.query("SELECT * FROM items")     # returns the entire table
+```
+
+**After**
+```
+handler("GET /items"):
+    page = clamp(request.query.page or 1, min=1)
+    size = clamp(request.query.size or DEFAULT_SIZE, min=1, max=MAX_SIZE)
+    rows = repo.page(limit=size, offset=(page - 1) * size)   # bounded query
+    return { data: rows, page, size, total: repo.count() }
+```
+**Why:** payload and memory stay bounded as data grows. Use a sane default page size and a hard
+maximum; prefer cursor/keyset pagination for large or frequently-changing tables. Apply the
+same defaults to every list endpoint so the response contract stays consistent.
+
+---
+
 ## Validation after refactor (Phase 3 exit criteria)
 
 A refactor is only **done** when:

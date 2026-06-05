@@ -1,7 +1,7 @@
 ---
 name: refactor-arch
 description: Analyzes, audits, and refactors legacy backends to the MVC pattern — language- and framework-agnostic. Detects the stack, maps the architecture, cross-references the code against an anti-pattern catalog, and produces an audit report; then PAUSES for human confirmation (HITL) before any refactoring. Use when inheriting/assessing a legacy backend, running an architecture/security audit, or planning a migration to MVC.
-trigger: /refactor-arch
+allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
 ---
 
 # refactor-arch
@@ -81,7 +81,7 @@ Endpoints:     <count + highlights>
 ## Phase 2 — Audit
 
 **Goal:** cross-reference the code against the anti-pattern catalog and emit a structured
-report. **Modifies nothing.**
+report. **Modifies nothing — the report is shown in the session only; it is not written to disk.**
 
 ### Steps
 
@@ -92,8 +92,9 @@ report. **Modifies nothing.**
 3. Fill the report following the [`audit-report-template.md`](./audit-report-template.md)
    **exactly**: header, summary with counts by severity, findings **ordered CRITICAL → LOW**,
    and the Deprecated APIs section.
-4. Save the report to `reports/audit-project-<N>.md` (create the `reports/` folder if needed).
-5. Present the report to the user and **proceed to the gate**.
+4. **Print the report in the session only — do not write any file.** The audit is read-only;
+   it leaves no artifact in the project.
+5. **Proceed to the gate.**
 
 > The principles catalog [`design-patterns-catalog.md`](./design-patterns-catalog.md)
 > (SOLID, DRY, KISS, YAGNI, MVC, Object Calisthenics) is the target ruler: each finding
@@ -113,8 +114,8 @@ When Phase 2 ends, the skill **STOPS**. Before any modification:
 
 1. State explicitly that **no target-project file has been changed** so far.
 2. Present the report summary (counts by severity + total).
-3. Tell the user the report was saved to `reports/audit-project-<N>.md` (read-only) and print
-   the confirmation line **exactly** as below, then **wait for the answer**:
+3. Confirm the audit was read-only and left **no file** in the project, then print the
+   confirmation line **exactly** as below, and **wait for the answer**:
 
 ```
 Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]
@@ -138,7 +139,7 @@ project's own toolchain, and **looped until the project is 100% functional**.
 flowchart TD
     D["3.1 Discover toolchain<br/>install · lint · format · build · test · run"]
     P["3.2 Plan & decompose<br/>independent tasks grouped in waves"]
-    O["3.3 Orchestrate subagents<br/>one worktree per task, run in parallel"]
+    O["3.3 Orchestrate<br/>in-place (small) · parallel worktrees (large)"]
     I["3.4 Integrate<br/>merge worktrees, resolve conflicts"]
     V["3.5 Verify<br/>format · lint · build · test · boot · endpoints"]
     DONE(["100% functional"])
@@ -168,10 +169,26 @@ From the audit findings and the target MVC layout, build a **task list** sized s
   everything in a wave runs in parallel; dependent tasks go to later waves.
 - Track tasks explicitly, each with a clear, verifiable done-criterion.
 
-### 3.3 Orchestrate parallel subagents in worktrees
+### 3.2.1 Scale the execution (decide parallelism)
 
-For each task in the current wave, dispatch **one subagent in its own git worktree** so
-concurrent edits never collide:
+**Match the orchestration cost to the project size — parallel worktrees are not free.** Setting
+up a worktree per task plus integration/merge has real overhead that only pays off at scale.
+Decide before fanning out:
+
+| Project shape | Strategy |
+|---|---|
+| **Small / single-domain** (≈ a few hundred LOC, one cohesive module/monolith) | Refactor in a **single in-place pass** — the orchestrator (or one subagent) does it sequentially. **Skip worktrees.** |
+| **Large / multi-domain** (many independent entities, or thousands of LOC) | **Fan out**: one subagent per slice/domain in isolated worktrees (3.3), grouped in waves. |
+
+Regardless of strategy, **install dependencies once and reuse** across tasks — never re-install
+per worktree.
+
+### 3.3 Orchestrate the refactor (parallel subagents for large projects)
+
+The **main session is always the orchestrator** (subagents cannot spawn their own subagents).
+For a **small** project, do the in-place pass and go straight to Verify (3.5). For a **large**
+project, dispatch **one subagent per task in its own git worktree** so concurrent edits never
+collide:
 
 - Create an isolated worktree per task (`git worktree add`), on its own branch.
 - The subagent refactors **only its slice**, following [`refactoring-playbook.md`](./refactoring-playbook.md)
@@ -179,6 +196,20 @@ concurrent edits never collide:
   it must **preserve the route surface** from Phase 1.
 - Run the wave's subagents **concurrently**; wait for the whole wave to finish before the next
   (the wave boundary is the dependency barrier).
+
+### 3.3.1 Cross-cutting best practices (apply during refactor)
+
+Beyond removing the audited anti-patterns, every refactor should leave these in place — stated
+**agnostically**; implement them with the project's own stack and only where they don't break
+the Phase 1 route surface:
+
+- **Authentication & authorization** — issue a signed, time-bound credential on login and gate
+  sensitive / state-changing / admin routes behind an authorization middleware (roles assigned
+  server-side, never from the request body). Keep public read endpoints public. See
+  [`refactoring-playbook.md`](./refactoring-playbook.md) §13.
+- **Pagination** — list endpoints return bounded payloads via a default page size and a hard
+  maximum (offset or cursor/keyset). Apply the same defaults across all list endpoints for a
+  consistent contract. See [`refactoring-playbook.md`](./refactoring-playbook.md) §14.
 
 ### 3.4 Integrate
 
