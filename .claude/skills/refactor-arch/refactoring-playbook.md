@@ -4,26 +4,27 @@ Concrete **before/after** transformations that turn the anti-patterns from
 [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) into code aligned with
 [`design-patterns-catalog.md`](./design-patterns-catalog.md).
 
-Examples use Python (Flask) and JavaScript (Express) as representatives — the **transformation
-pattern is language-independent**; apply the same move in the project's actual stack. Always
-**preserve behavior**: every endpoint that responded before must still respond after.
+Examples are written in **language-neutral pseudocode** — they describe the *move*, not a
+specific stack. Apply each pattern using the project's actual language, framework, and
+standard libraries. Always **preserve behavior**: every endpoint that responded before must
+still respond after.
 
 ## Target MVC layout
 
 ```
-src/
-├── config/        # settings from env, no hardcoded secrets
-├── models/        # entities + invariant rules
-├── repositories/  # data access (parameterized queries)
-├── services/      # business logic / use cases
-├── controllers/   # thin HTTP adapters
-├── routes/        # endpoint → controller mapping (views)
-├── middlewares/   # error handler, auth, CORS, logging
-└── app.py|app.js  # composition root (entry point)
+config/        # settings from env, no hardcoded secrets
+models/        # entities + invariant rules
+repositories/  # data access (parameterized queries)
+services/      # business logic / use cases
+controllers/   # thin request→response adapters
+routes/        # endpoint → controller mapping (views)
+middlewares/   # error handler, auth, CORS, logging
+<entry point>  # composition root: wires everything together
 ```
 
 Dependencies flow inward: `routes → controllers → services → repositories → models`.
-`config` and `middlewares` are cross-cutting.
+`config` and `middlewares` are cross-cutting. Names/extensions vary by stack; the
+**responsibilities** are what matter.
 
 ---
 
@@ -32,15 +33,17 @@ Dependencies flow inward: `routes → controllers → services → repositories 
 Anti-pattern: *SQL Injection*. Principle: security; KISS.
 
 **Before**
-```python
-cursor.execute("SELECT * FROM users WHERE email = '" + email + "'")
+```
+query = "SELECT * FROM users WHERE email = '" + userInput + "'"
+db.run(query)
 ```
 
 **After**
-```python
-cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
 ```
-**Why:** the driver binds the value; user input can never alter the query structure.
+db.run("SELECT * FROM users WHERE email = ?", [userInput])   # value is bound, not interpolated
+```
+**Why:** the driver binds the value, so user input can never alter the query structure. Use
+parameter binding, a query builder, or an ORM — never string concatenation.
 
 ---
 
@@ -49,22 +52,18 @@ cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
 Anti-pattern: *Hardcoded secrets and credentials*. Principle: SRP (Config layer); 12-factor.
 
 **Before**
-```python
-app.config["SECRET_KEY"] = "minha-chave-super-secreta-123"
+```
+SECRET_KEY = "literal-secret-committed-in-code"
 ```
 
 **After**
-```python
-# config/settings.py
-import os
-class Settings:
-    SECRET_KEY = os.environ["SECRET_KEY"]          # fail fast if missing
-    DEBUG = os.environ.get("DEBUG", "false") == "true"
-
-# app.py
-app.config.from_object(Settings)
 ```
-**Why:** secrets leave the codebase/history; one place owns configuration.
+# config module — the single owner of configuration
+SECRET_KEY = env("SECRET_KEY")          # read from environment; fail fast if missing
+DEBUG      = env("DEBUG", default=false)
+```
+**Why:** secrets leave the codebase and history; one place owns configuration and can differ
+per environment.
 
 ---
 
@@ -73,40 +72,35 @@ app.config.from_object(Settings)
 Anti-pattern: *Insecure password storage*. Principle: security.
 
 **Before**
-```python
-self.password = hashlib.md5(pwd.encode()).hexdigest()        # unsalted, broken
+```
+stored = md5(password)                  # unsalted / fast / homemade — broken
 ```
 
 **After**
-```python
-from werkzeug.security import generate_password_hash, check_password_hash
-
-def set_password(self, pwd):
-    self.password_hash = generate_password_hash(pwd)          # salted (pbkdf2/scrypt)
-
-def check_password(self, pwd):
-    return check_password_hash(self.password_hash, pwd)
 ```
-**Why:** salted, slow hashing resists rainbow tables and brute force.
+stored = strongHash(password)           # salted, slow KDF: bcrypt / argon2 / scrypt
+isValid = strongHashVerify(stored, attempt)
+```
+**Why:** salted, slow hashing resists rainbow tables and brute force. Always use the
+platform's vetted hashing library — never a homemade hash.
 
 ---
 
-## 4. Sensitive data exposure → output serializer
+## 4. Sensitive data exposure → output DTO
 
 Anti-pattern: *Sensitive data exposure*. Principle: DRY (one serializer); least exposure.
 
 **Before**
-```python
-def to_dict(self):
-    return {"id": self.id, "email": self.email, "password": self.password}  # leaks hash
+```
+serialize(user) -> { id, email, password, ssn }   # leaks secret/PII
 ```
 
 **After**
-```python
-def to_dict(self):
-    return {"id": self.id, "email": self.email}   # never serialize secrets/PII
 ```
-**Why:** the output DTO is the contract; sensitive fields never cross the boundary.
+serialize(user) -> { id, email }        # explicit allow-list of safe fields only
+```
+**Why:** the output DTO is the public contract; sensitive fields never cross the boundary.
+Apply the same redaction to logs.
 
 ---
 
@@ -115,33 +109,19 @@ def to_dict(self):
 Anti-pattern: *God Class / God Module*, *Business logic in the wrong layer*. Principle: SRP, DIP.
 
 **Before**
-```js
-class AppManager {                       // DB + routing + business logic
-  constructor() { this.db = new sqlite3.Database(":memory:"); }
-  setupRoutes(app) {
-    app.post("/checkout", (req, res) => { /* validate + charge + persist + notify */ });
-  }
-}
+```
+class App:                              # DB + routing + business logic in one place
+    db
+    route("POST /checkout"):
+        validate(); charge(); persist(); notify()
 ```
 
 **After**
-```js
-// repositories/enrollmentRepository.js — data access only
-class EnrollmentRepository { constructor(db){ this.db = db; } create(userId, courseId){ /* parametrized */ } }
-
-// services/checkoutService.js — business logic only
-class CheckoutService {
-  constructor(enrollments, payments, gateway){ /* injected deps */ }
-  execute({ userId, courseId, card }) { /* charge + enroll + record */ }
-}
-
-// controllers/checkoutController.js — thin HTTP adapter
-const checkout = (service) => (req, res) => {
-  const result = service.execute(req.body);
-  res.status(201).json(result);
-};
-
-// routes + app.js wire everything (composition root)
+```
+Repository  -> data access only (parameterized queries)
+Service     -> business rules only (charge, enroll, record); dependencies injected
+Controller  -> thin: read request → call service → write response
+Routes/Root -> compose: build dependencies and wire them together
 ```
 **Why:** each unit has one reason to change and is testable in isolation.
 
@@ -152,132 +132,109 @@ const checkout = (service) => (req, res) => {
 Anti-pattern: *Business logic in the wrong layer*. Principle: SRP.
 
 **Before**
-```python
-@app.route("/reports/sales")
-def sales():
-    rows = db.execute("SELECT total FROM orders").fetchall()
-    revenue = sum(r["total"] for r in rows)
-    discount = revenue * 0.1 if revenue > 10000 else 0          # business rule in controller
-    return jsonify({"revenue": revenue, "discount": discount})
+```
+handler("GET /reports/sales"):
+    rows     = db.query("SELECT total FROM orders")
+    revenue  = sum(rows.total)
+    discount = revenue > 10000 ? revenue * 0.1 : 0     # business rule inside the HTTP handler
+    return { revenue, discount }
 ```
 
 **After**
-```python
-# services/sales_service.py
-class SalesService:
-    def __init__(self, orders): self.orders = orders
-    def report(self):
-        revenue = self.orders.total_revenue()
-        return {"revenue": revenue, "discount": self._discount(revenue)}
-    def _discount(self, revenue): ...
+```
+service SalesService(orders):
+    report(): revenue = orders.totalRevenue(); return { revenue, discount: rule(revenue) }
 
-# controllers/sales_controller.py
-def sales(service):
-    return jsonify(service.report()), 200
+handler("GET /reports/sales", salesService):
+    return salesService.report()                       # controller only delegates
 ```
 **Why:** the rule is testable without HTTP/DB and reusable across entry points.
 
 ---
 
-## 7. Global mutable connection → injected, request-scoped access
+## 7. Global mutable state → injected dependency
 
 Anti-pattern: *Mutable global state*. Principle: DIP.
 
 **Before**
-```python
-db_connection = None
-def get_db():
-    global db_connection
-    if db_connection is None:
-        db_connection = sqlite3.connect("loja.db", check_same_thread=False)  # shared singleton
-    return db_connection
+```
+global connection = null
+getDb():
+    if connection == null: connection = connect(...)   # shared mutable singleton
+    return connection
 ```
 
 **After**
-```python
-# repository receives the connection/session; the app wires its lifecycle per request
-class ProductRepository:
-    def __init__(self, db): self.db = db
-    def all(self): return self.db.execute("SELECT * FROM products").fetchall()
+```
+class ProductRepository(db):            # receives its dependency
+    all(): return db.query("SELECT * FROM products")
 
-# app factory provides a fresh, properly-scoped connection (e.g. Flask `g`, or a session per request)
+# the entry point owns the connection lifecycle (per request/scope) and injects it
 ```
 **Why:** no shared mutable global; thread-safe and mockable in tests.
 
 ---
 
-## 8. N+1 query → single JOIN / eager load
+## 8. N+1 query → single set-based query
 
 Anti-pattern: *N+1 query*. Principle: performance.
 
 **Before**
-```python
-orders = db.execute("SELECT * FROM orders").fetchall()
+```
+orders = db.query("SELECT * FROM orders")
 for o in orders:
-    items = db.execute("SELECT * FROM items WHERE order_id = ?", (o["id"],)).fetchall()  # N queries
+    items = db.query("SELECT * FROM items WHERE order_id = ?", [o.id])   # one query per row
 ```
 
 **After**
-```python
-rows = db.execute("""
-    SELECT o.id AS order_id, i.*
-    FROM orders o
-    LEFT JOIN items i ON i.order_id = o.id
-""").fetchall()                                # one query, grouped in memory
 ```
-**Why:** query count is constant instead of proportional to the result set.
+rows = db.query("SELECT o.id, i.* FROM orders o LEFT JOIN items i ON i.order_id = o.id")
+# single query; group in memory  (or use the ORM's eager-loading equivalent)
+```
+**Why:** query count stays constant instead of growing with the result set.
 
 ---
 
-## 9. Duplicated validation → reusable schema/validator
+## 9. Duplicated validation → single validator/schema
 
 Anti-pattern: *Duplicated logic*, *Missing or weak input validation*. Principle: DRY.
 
 **Before**
-```python
-# repeated in create() and update()
-if not data.get("title"): return error("title required")
-if len(data["title"]) > 200: return error("title too long")
+```
+# copied in create() and update():
+if empty(input.title):        fail("title required")
+if length(input.title) > 200: fail("title too long")
 ```
 
 **After**
-```python
-# schemas/task_schema.py
-class TaskSchema(Schema):
-    title = fields.Str(required=True, validate=Length(min=3, max=200))
-
-# controllers reuse it
-data = TaskSchema().load(request.get_json())   # one source of truth for validation
 ```
-**Why:** validation lives in one place; create/update can't drift apart.
+schema TaskSchema: title is string, required, length 3..200
+data = TaskSchema.validate(input)       # one source of truth, reused by create and update
+```
+**Why:** validation lives in one place; create/update cannot drift apart.
 
 ---
 
-## 10. Scattered errors + `print` → central handler + logging
+## 10. Scattered errors + prints → central handler + logging
 
 Anti-pattern: *Poor error handling + logging via `print`*. Principle: SRP (middleware).
 
 **Before**
-```python
-try:
-    ...
-except Exception as e:
-    print("ERRO: " + str(e))                   # swallowed, no levels
-    return jsonify({"erro": str(e)}), 500
+```
+try: ...
+catch e:
+    print("ERR " + e)                   # swallowed, no levels, leaks internals
+    return 500, e.message
 ```
 
 **After**
-```python
-import logging
-log = logging.getLogger(__name__)
-
-# middlewares/error_handler.py
-@app.errorhandler(Exception)
-def handle(e):
-    log.exception("unhandled error")           # structured, with stack
-    return jsonify({"error": "internal error"}), 500
 ```
-**Why:** one consistent error contract and real observability; no leaked internals.
+log = logger()
+# central error middleware:
+onError(e): log.error("unhandled", e); return 500, { error: "internal error" }
+```
+**Why:** one consistent error contract and real observability; internals never leak. Use a
+leveled logger, not prints.
 
 ---
 
@@ -286,18 +243,17 @@ def handle(e):
 Anti-pattern: *Broken authentication + privilege escalation*. Principle: security.
 
 **Before**
-```python
-user = User(**request.get_json())              # client can set role="admin"
+```
+user = new User(allFieldsFrom(request.body))   # client can set role = "admin"
 ```
 
 **After**
-```python
-body = request.get_json()
-user = User(name=body["name"], email=body["email"])   # explicit allow-list
-user.role = "user"                                    # privileged fields set server-side
-# destructive/admin routes go behind an auth + authorization middleware
 ```
-**Why:** clients can't escalate privileges; sensitive fields are server-controlled.
+user = new User({ name: body.name, email: body.email })   # explicit allow-list
+user.role = "user"                                        # privileged fields set server-side
+# destructive/admin routes sit behind an auth + authorization middleware
+```
+**Why:** clients cannot escalate privileges; sensitive fields are server-controlled.
 
 ---
 
@@ -306,18 +262,18 @@ user.role = "user"                                    # privileged fields set se
 Anti-pattern: *Use of deprecated API*. Principle: maintainability.
 
 **Before**
-```python
-created_at = datetime.utcnow()                 # deprecated (naive datetime)
-user = User.query.get(user_id)                 # legacy SQLAlchemy API
+```
+t = utcnow()                 # deprecated / naive timestamp
+u = Model.query.get(id)      # legacy data-access API
 ```
 
 **After**
-```python
-from datetime import datetime, UTC
-created_at = datetime.now(UTC)                 # timezone-aware
-user = db.session.get(User, user_id)           # SQLAlchemy 2.0 API
 ```
-**Why:** removes deprecation warnings and avoids subtly wrong (naive) timestamps.
+t = now(UTC)                 # timezone-aware, current API
+u = session.get(Model, id)   # current data-access API
+```
+**Why:** removes deprecation warnings and avoids subtly wrong behavior. General rule: check
+each dependency's deprecation notes and migrate to the documented replacement.
 
 ---
 
