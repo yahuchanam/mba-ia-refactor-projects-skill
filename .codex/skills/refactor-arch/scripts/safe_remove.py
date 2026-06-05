@@ -1,0 +1,1 @@
+../../../../.claude/skills/refactor-arch/scripts/safe_remove.py

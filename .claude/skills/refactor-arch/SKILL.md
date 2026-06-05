@@ -1,7 +1,7 @@
 ---
 name: refactor-arch
 description: Analyzes, audits, and refactors legacy backends to the MVC pattern — language- and framework-agnostic. Detects the stack, maps the architecture, cross-references the code against an anti-pattern catalog, and produces an audit report; then PAUSES for human confirmation (HITL) before any refactoring. Use when inheriting/assessing a legacy backend, running an architecture/security audit, or planning a migration to MVC.
-allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(grep:*), Bash(rg:*), Bash(find:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(which:*), Bash(command:*), Bash(test:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git config:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(uv:*), Bash(uvx:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(grep:*), Bash(rg:*), Bash(find:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(which:*), Bash(command:*), Bash(test:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git config:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(uv:*), Bash(uvx:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
 ---
 
 # refactor-arch
@@ -56,6 +56,18 @@ confirmation gate. When in doubt, stop and ask.
   name (`pip`, `eslint`). Run tools through their launcher so the program name stays stable:
   `uv run <tool>` / `python -m <tool>` (Python), `npx <tool>` (Node). This both satisfies the
   allow-list and avoids depending on a specific venv path.
+
+## Deletion guardrail
+
+- Raw deletion commands are not allowed: do not use `rm`, `rmdir`, or `git rm`.
+- During Phase 3, remove obsolete files/directories only with the bundled guardrailed remover:
+  `python3 .claude/skills/refactor-arch/scripts/safe_remove.py <path>`.
+- Run it from the target project root. The project root boundary defaults to the current working
+  directory, and every target must resolve inside that boundary.
+- First run without `--confirm` to inspect the dry-run. Re-run with `--confirm` only after the
+  listed targets are clearly part of the refactor plan.
+- The remover refuses the project root, `.git`, `.claude`, `.codex`, `.env`, dependency folders,
+  virtualenvs, and any path that resolves outside the project, including symlinks.
 
 ---
 
@@ -290,6 +302,7 @@ Validation:  app boots ✓ | endpoints respond ✓ | anti-patterns resolved ✓
 | [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics | ✅ |
 | [`audit-report-template.md`](./audit-report-template.md) | Standardized audit report skeleton (Phase 2) | ✅ |
 | [`refactoring-playbook.md`](./refactoring-playbook.md) | Before/after transformations mapped to the catalog + MVC target layout (Phase 3) | ✅ |
+| [`scripts/safe_remove.py`](./scripts/safe_remove.py) | Guardrailed remover for Phase 3 cleanup inside the target project root only | ✅ |
 | *(pending)* detailed analysis heuristics | Dedicated Phase 1 reference (currently summarized inline above) | ⏳ |
 
 > **Self-contained and copyable:** the skill references no paths outside this folder, so it

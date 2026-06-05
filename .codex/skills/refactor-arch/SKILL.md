@@ -48,6 +48,18 @@ confirmation gate. When in doubt, stop and ask.
 - Respect Codex sandbox/approval prompts. Request escalation for dependency downloads,
   writes outside the workspace, GUI/browser opens, and potentially destructive operations.
 
+## Deletion guardrail
+
+- Raw deletion commands are not allowed: do not use `rm`, `rmdir`, or `git rm`.
+- During Phase 3, remove obsolete files/directories only with the bundled guardrailed remover:
+  `python3 .codex/skills/refactor-arch/scripts/safe_remove.py <path>`.
+- Run it from the target project root. The project root boundary defaults to the current working
+  directory, and every target must resolve inside that boundary.
+- First run without `--confirm` to inspect the dry-run. Re-run with `--confirm` only after the
+  listed targets are clearly part of the refactor plan.
+- The remover refuses the project root, `.git`, `.claude`, `.codex`, `.env`, dependency folders,
+  virtualenvs, and any path that resolves outside the project, including symlinks.
+
 ---
 
 ## Phase 1 — Analysis
@@ -281,6 +293,7 @@ Validation:  app boots ✓ | endpoints respond ✓ | anti-patterns resolved ✓
 | [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics | ✅ |
 | [`audit-report-template.md`](./audit-report-template.md) | Standardized audit report skeleton (Phase 2) | ✅ |
 | [`refactoring-playbook.md`](./refactoring-playbook.md) | Before/after transformations mapped to the catalog + MVC target layout (Phase 3) | ✅ |
+| [`scripts/safe_remove.py`](./scripts/safe_remove.py) | Guardrailed remover for Phase 3 cleanup inside the target project root only | ✅ |
 | *(pending)* detailed analysis heuristics | Dedicated Phase 1 reference (currently summarized inline above) | ⏳ |
 
 > **Self-contained and copyable:** the skill references no paths outside this folder, so it

@@ -33,7 +33,6 @@
       "Bash(git merge:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git rm:*)",
       "Bash(git stash:*)",
       "Bash(python:*)",
       "Bash(python3:*)",
@@ -55,6 +54,9 @@
       "Bash(make:*)"
     ],
     "deny": [
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(git rm:*)",
       "Bash(rm -rf:*)",
       "Read(./.env)",
       "Read(./**/.env)"
