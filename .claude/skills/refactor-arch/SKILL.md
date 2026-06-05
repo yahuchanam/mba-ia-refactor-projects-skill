@@ -1,7 +1,7 @@
 ---
 name: refactor-arch
 description: Analyzes, audits, and refactors legacy backends to the MVC pattern — language- and framework-agnostic. Detects the stack, maps the architecture, cross-references the code against an anti-pattern catalog, and produces an audit report; then PAUSES for human confirmation (HITL) before any refactoring. Use when inheriting/assessing a legacy backend, running an architecture/security audit, or planning a migration to MVC.
-allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(grep:*), Bash(rg:*), Bash(find:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(which:*), Bash(command:*), Bash(test:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
 ---
 
 # refactor-arch
@@ -35,6 +35,16 @@ flowchart TD
 
 **Inviolable principle:** no writing/editing/deleting any target-project file before the
 confirmation gate. When in doubt, stop and ask.
+
+## Tooling conventions (run without permission friction)
+
+- **Inspect files with the native tools** — `Read`, `Glob`, `Grep` — never shell `cat`/`ls`/`find`
+  for reading. They are pre-authorized and never prompt.
+- **When you must shell out, run ONE simple command per call.** Do **not** combine commands with
+  `&&`, `||`, `;`, pipes (`|`), subshells `( … )`, redirects (`>`, `2>/dev/null`), or command
+  substitution `$( … )`: Claude Code flags compound/complex shell lines for approval **even when
+  every part is allow-listed**. Example — to probe the toolchain, issue `python3 -m pytest --version`
+  as its own call, not chained with `echo`/`ls`/other checks.
 
 ---
 
@@ -153,10 +163,12 @@ flowchart TD
 
 Detect the exact commands for **this** stack by inspecting its manifests/config — never assume:
 `package.json` scripts, `pyproject.toml`/`setup.cfg`/`tox.ini`, `Makefile`, `README`, CI files
-(`.github/workflows/*`), `.pre-commit-config.yaml`, lockfiles. Record the command for each of:
-**install deps · format · lint · build/compile · test · run/boot**. If a category is missing,
-fall back to the language's standard tool, or define a smoke test = boot the app + hit every
-endpoint.
+(`.github/workflows/*`), `.pre-commit-config.yaml`, lockfiles. **Read these manifests with
+`Read`/`Glob`/`Grep`, and probe tool availability with single atomic commands** (e.g.
+`python3 -m pytest --version`) — never chained shell lines (see *Tooling conventions*). Record the
+command for each of: **install deps · format · lint · build/compile · test · run/boot**. If a
+category is missing, fall back to the language's standard tool, or define a smoke test = boot the
+app + hit every endpoint.
 
 ### 3.2 Plan & decompose into tasks
 
