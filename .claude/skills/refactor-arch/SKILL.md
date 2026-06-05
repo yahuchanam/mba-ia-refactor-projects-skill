@@ -1,7 +1,7 @@
 ---
 name: refactor-arch
 description: Analyzes, audits, and refactors legacy backends to the MVC pattern — language- and framework-agnostic. Detects the stack, maps the architecture, cross-references the code against an anti-pattern catalog, and produces an audit report; then PAUSES for human confirmation (HITL) before any refactoring. Use when inheriting/assessing a legacy backend, running an architecture/security audit, or planning a migration to MVC.
-allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(grep:*), Bash(rg:*), Bash(find:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(which:*), Bash(command:*), Bash(test:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(grep:*), Bash(rg:*), Bash(find:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(which:*), Bash(command:*), Bash(test:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git config:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
 ---
 
 # refactor-arch
@@ -45,6 +45,12 @@ confirmation gate. When in doubt, stop and ask.
   substitution `$( … )`: Claude Code flags compound/complex shell lines for approval **even when
   every part is allow-listed**. Example — to probe the toolchain, issue `python3 -m pytest --version`
   as its own call, not chained with `echo`/`ls`/other checks.
+- **Keep the subcommand right after the program; avoid global options like `git -C <path>`.**
+  Options placed *between* the program and its subcommand (e.g. `git -C /path ls-files`) defeat
+  permission matching, which keys on the `git <subcommand>` prefix — so the call prompts even
+  though `git ls-files` is allow-listed. To act on another directory (e.g. a worktree), run the
+  command **from that directory's working context** (the worktree subagent already works there),
+  not via `-C`. For listing project files, prefer the native `Glob` tool over `git ls-files`.
 
 ---
 
