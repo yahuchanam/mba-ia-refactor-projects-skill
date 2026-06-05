@@ -1,10 +1,9 @@
 # Fase 1 — Análise · Projeto 2 (`ecommerce-api-legacy`)
 
-> Saída da **Fase 1 (Análise)** da skill `refactor-arch` aplicada ao Projeto 2.
-> Detecta stack, mapeia a arquitetura atual e imprime o resumo. Consolida as
-> **heurísticas de detecção** (agora exercitadas em Node/Express) e o **catálogo de
-> anti-patterns** específico deste projeto. Veja o Projeto 1 em
-> [`phase1-project-1.md`](./phase1-project-1.md) — as heurísticas genéricas são as mesmas.
+> Análise do Projeto 2: detecção de stack, mapeamento da arquitetura atual e o
+> **catálogo de anti-patterns** específico deste projeto (heurísticas de detecção
+> exercitadas em Node/Express). Heurísticas genéricas: ver
+> [`phase1-project-1.md`](./phase1-project-1.md).
 
 ---
 
@@ -101,7 +100,7 @@ específicos** que disparam para esta stack.
 
 ### 2.5 Entry point e superfície de rotas
 - Entry point: `app.listen(config.port, ...)` em `app.js:12`.
-- Rotas declaradas em `AppManager.setupRoutes` → 3 endpoints a preservar na Fase 3.
+- Rotas declaradas em `AppManager.setupRoutes` → 3 endpoints (superfície de rotas atual).
 
 ---
 
@@ -198,29 +197,3 @@ Distribuição mínima exigida (**≥1 CRITICAL/HIGH, ≥2 MEDIUM, ≥2 LOW**) c
   hashing artesanal onde existe biblioteca padrão.
 - **Recomendação moderna:** migrar para `async/await` (ex.: wrapper `util.promisify`,
   `better-sqlite3` síncrono, ou `node:sqlite`), e **substituir `badCrypto` por `bcrypt`/`argon2`**.
-
----
-
-## 5. Comparativo com o Projeto 1 (por que a skill precisa ser agnóstica)
-
-| Aspecto | Projeto 1 (Flask) | Projeto 2 (Express) |
-|---|---|---|
-| Separação | Arquivos por papel (nominal) | **Tudo numa God Class** |
-| SQL | **Injetável** (string concat) | Parametrizado (sem SQLi) |
-| Segredos | `SECRET_KEY` hardcoded + exposto no /health | Chave de gateway/senha + **cartão logado** |
-| Assíncrono | Síncrono | **Callback hell** + coordenação manual |
-| Estado global | Conexão singleton | `globalCache`/`totalRevenue` mutáveis |
-
-> A skill deve detectar **God Class** (P2) tanto quanto **monólito procedural** (P1), e
-> reconhecer que a ausência de SQLi no P2 não significa ausência de problemas críticos.
-
----
-
-## 6. Próximos passos
-
-- **Fase 2 (Auditoria):** materializar este catálogo no template, ordenado CRITICAL → LOW,
-  com `arquivo:linha`, e **pausar para confirmação humana**. Salvar em `reports/audit-project-2.md`.
-- **Fase 3 (Refatoração):** quebrar a God Class em camadas MVC (config sem segredos; models/
-  repositórios por entidade com queries parametrizadas — já ok; service layer para checkout e
-  relatório; controllers finos; error handler central; remover estado global e `badCrypto`),
-  validando que a app sobe e os **3 endpoints** continuam respondendo (`api.http`).

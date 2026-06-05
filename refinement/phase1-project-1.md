@@ -1,8 +1,7 @@
 # Fase 1 — Análise · Projeto 1 (`code-smells-project`)
 
-> Saída da **Fase 1 (Análise)** da skill `refactor-arch` aplicada ao Projeto 1.
-> Detecta stack, mapeia a arquitetura atual e imprime o resumo. Também consolida as
-> **heurísticas de detecção** e o **catálogo de anti-patterns** que alimentarão as Fases 2 e 3.
+> Análise do Projeto 1: detecção de stack, mapeamento da arquitetura atual e
+> catálogo de anti-patterns com sinais de detecção, severidade e `arquivo:linha`.
 
 ---
 
@@ -63,9 +62,9 @@ itens_pedido(id, pedido_id → pedidos.id, produto_id → produtos.id, quantidad
 
 ---
 
-## 2. Heurísticas de Detecção (reutilizáveis pela skill)
+## 2. Heurísticas de Detecção
 
-Sinais que a Fase 1 usa para classificar qualquer projeto, de forma agnóstica de stack.
+Sinais usados para identificar a stack e mapear a arquitetura, de forma agnóstica de tecnologia.
 
 ### 2.1 Linguagem
 | Sinal | Conclusão |
@@ -108,13 +107,13 @@ Sinais que a Fase 1 usa para classificar qualquer projeto, de forma agnóstica d
 ### 2.5 Pontos de entrada e superfície de rotas
 - Entry point: bloco `if __name__ == "__main__":` em `app.py:80` → `app.run(...)`.
 - Rotas: `app.add_url_rule(...)` (registro manual) + `@app.route` inline.
-- Contar endpoints e mapear método+path dá a **superfície a preservar** na validação da Fase 3.
+- Contar endpoints e mapear método+path documenta a **superfície de rotas** atual do projeto.
 
 ---
 
 ## 3. Catálogo de Anti-Patterns (com sinais de detecção e severidade)
 
-Cada item traz: **sinal de detecção** (acionável, não genérico), **evidência no Projeto 1** com `arquivo:linha`, **severidade** e **impacto**. O catálogo cobre a distribuição mínima exigida — pelo menos **1 CRITICAL/HIGH, 2 MEDIUM e 2 LOW** — e vai além para servir de base à Fase 2.
+Cada item traz: **sinal de detecção** (acionável, não genérico), **evidência no Projeto 1** com `arquivo:linha`, **severidade** e **impacto**. O catálogo cobre a distribuição mínima exigida — pelo menos **1 CRITICAL/HIGH, 2 MEDIUM e 2 LOW** — e vai além para documentar o panorama completo do projeto.
 
 ### 🔴 CRITICAL
 
@@ -211,14 +210,3 @@ detecção fica registrado para os Projetos 2 e 3:
   (ex.: `before_first_request`, `Markup` movido para `markupsafe`, `datetime.utcnow()`).
 - **Recomendação:** substituir pelo equivalente moderno e fixar versão.
 
----
-
-## 5. Próximos passos
-
-- **Fase 2 (Auditoria):** materializar este catálogo no template de relatório de auditoria,
-  ordenado CRITICAL → LOW, com `arquivo:linha` exatos, e **pausar para confirmação humana**
-  antes de qualquer alteração. Salvar em `reports/audit-project-1.md`.
-- **Fase 3 (Refatoração):** reestruturar para MVC (config sem segredo hardcoded, models de
-  dados, repositório/queries parametrizadas, service layer para regra de negócio, controllers
-  finos, error handling central, entry point limpo) e validar que **a app sobe e os 19
-  endpoints continuam respondendo**.

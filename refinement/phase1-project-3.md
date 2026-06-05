@@ -1,10 +1,9 @@
 # Fase 1 — Análise · Projeto 3 (`task-manager-api`)
 
-> Saída da **Fase 1 (Análise)** da skill `refactor-arch` aplicada ao Projeto 3 — o caso
-> mais difícil: o projeto **já possui separação de camadas** (`models/ routes/ services/
-> utils/`), então a skill precisa achar smells *dentro* de uma estrutura organizada
-> (segurança/qualidade **e** arquitetura). Heurísticas genéricas: ver
-> [`phase1-project-1.md`](./phase1-project-1.md).
+> Análise do Projeto 3 — o caso mais difícil: o projeto **já possui separação de
+> camadas** (`models/ routes/ services/ utils/`), porém os smells estão *dentro* de uma
+> estrutura organizada (segurança/qualidade **e** arquitetura). Heurísticas genéricas:
+> ver [`phase1-project-1.md`](./phase1-project-1.md).
 
 ---
 
@@ -91,7 +90,7 @@ Genéricas no doc do P1. Sinais **novos** que importam quando o projeto *parece*
 | Campo sensível (`password`) presente em `to_dict`/serialização | exposição de dados (CRITICAL) |
 | `datetime.utcnow()` / `Model.query.get(` | **APIs deprecated** (ver §4) |
 
-→ **Projeto 3:** todos os sinais acima disparam. A skill **não pode** concluir "já está
+→ **Projeto 3:** todos os sinais acima disparam. **Não se pode** concluir "já está
 em MVC, nada a fazer" só por ver as pastas.
 
 ---
@@ -191,29 +190,3 @@ Diferente de P1/P2, **aqui há APIs deprecated reais** — principal achado de "
 - **Sinal de detecção:** `X.query.get(pk)` (API Query legada).
 - **Evidência:** `User.query.get(...)`, `Task.query.get(...)`, `Category.query.get(...)` em todas as rotas (`task_routes.py:42,51,67,158`; `user_routes.py:29,94`; `report_routes.py:105,192,213`).
 - **Equivalente moderno:** `db.session.get(Model, pk)`.
-
----
-
-## 5. Comparativo dos 3 projetos (por que a skill precisa ser agnóstica)
-
-| Aspecto | P1 (Flask cru) | P2 (Express) | P3 (Flask + SQLAlchemy) |
-|---|---|---|---|
-| Estrutura | Monólito procedural | God Class | **Camadas parciais (enganosas)** |
-| SQL Injection | **Sim** | Não (params) | Não (ORM) |
-| Hashing de senha | Texto plano | `badCrypto` caseiro | **MD5 sem salt** |
-| Camada de negócio | No "model" | No handler | **Nos controllers + camadas mortas** |
-| APIs deprecated | — | Padrão legado (callbacks) | **`utcnow()` + `query.get()`** |
-| Desafio principal | Reconstruir do zero | Quebrar a God Class | **Achar smells dentro do "organizado"** |
-
----
-
-## 6. Próximos passos
-
-- **Fase 2 (Auditoria):** materializar o catálogo no template, ordenado CRITICAL → LOW,
-  com `arquivo:linha` e a seção de **APIs deprecated**, e **pausar para confirmação humana**.
-  Salvar em `reports/audit-project-3.md`.
-- **Fase 3 (Refatoração):** sem reconstruir do zero — **mover regra para services**, fazer
-  controllers finos consumirem `models`/`utils`/`services` de fato, extrair config para
-  `.env` (já há `python-dotenv`), trocar MD5 por `werkzeug.security`/`bcrypt`, remover
-  `password` do `to_dict`, eliminar N+1/duplicação, e modernizar as APIs deprecated.
-  Validar que a app sobe (após `seed.py`) e os **22 endpoints** continuam respondendo.
