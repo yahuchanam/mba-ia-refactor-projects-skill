@@ -11,9 +11,8 @@ Skill that drives the assessment and architectural evolution of a legacy backend
 file is modified. Phase 3 (refactoring) only starts after **explicit human confirmation**
 of the audit report.
 
-> ⚠️ **This version implements Phases 1 and 2 + the confirmation gate.** Phase 3
-> (refactoring to MVC) is **not** yet implemented in this skill — upon reaching the gate,
-> the skill stops and waits. See [Phase 3](#phase-3--refactoring-pending).
+> ⚠️ **Safety:** Phases 1–2 never modify files. Phase 3 only runs after an explicit `y` at
+> the [confirmation gate](#-confirmation-gate-hitl) — never before.
 
 ## Workflow overview
 
@@ -22,7 +21,7 @@ flowchart TD
     F1["Phase 1 — Analysis<br/>detect stack and map architecture"]
     F2["Phase 2 — Audit<br/>findings report CRITICAL→LOW"]
     GATE{"🛑 HITL gate<br/>human confirmation required"}
-    F3["Phase 3 — Refactoring<br/>MVC + validation · pending"]
+    F3["Phase 3 — Refactoring<br/>orchestrated · parallel subagents · loop until green"]
 
     F1 -->|read-only| F2
     F2 -->|read-only| GATE
@@ -126,16 +125,97 @@ Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]
 
 ---
 
-## Phase 3 — Refactoring (pending)
+## Phase 3 — Refactoring (orchestrated, agent-in-the-loop)
 
-> 🚧 **Not implemented in this version of the skill.** Even after a `y` at the gate, this
-> version does not perform the refactoring: tell the user that Phase 3 will be added in a
-> later iteration (it depends on the detailed *refactoring playbook* and *MVC guidelines*).
+**Precondition:** explicit `y` at the gate. Never start otherwise.
 
-When implemented, Phase 3 must: restructure to MVC (config without secrets, models,
-repository/parameterized queries, service layer, thin controllers, central error handling,
-clean entry point), **and validate** that the app boots without errors and that **every
-original endpoint still responds**.
+**Goal:** restructure the project to MVC, removing the audited anti-patterns, **without
+changing behavior** — every original endpoint must still respond. The refactor is split into
+tasks, executed by **parallel subagents in isolated git worktrees**, verified against the
+project's own toolchain, and **looped until the project is 100% functional**.
+
+```mermaid
+flowchart TD
+    D["3.1 Discover toolchain<br/>install · lint · format · build · test · run"]
+    P["3.2 Plan & decompose<br/>independent tasks grouped in waves"]
+    O["3.3 Orchestrate subagents<br/>one worktree per task, run in parallel"]
+    I["3.4 Integrate<br/>merge worktrees, resolve conflicts"]
+    V["3.5 Verify<br/>format · lint · build · test · boot · endpoints"]
+    DONE(["100% functional"])
+
+    D --> P --> O --> I --> V
+    V -->|all green| DONE
+    V -.->|any failure| P
+```
+
+### 3.1 Discover the project's toolchain (stack-driven)
+
+Detect the exact commands for **this** stack by inspecting its manifests/config — never assume:
+`package.json` scripts, `pyproject.toml`/`setup.cfg`/`tox.ini`, `Makefile`, `README`, CI files
+(`.github/workflows/*`), `.pre-commit-config.yaml`, lockfiles. Record the command for each of:
+**install deps · format · lint · build/compile · test · run/boot**. If a category is missing,
+fall back to the language's standard tool, or define a smoke test = boot the app + hit every
+endpoint.
+
+### 3.2 Plan & decompose into tasks
+
+From the audit findings and the target MVC layout, build a **task list** sized so tasks are as
+**independent as possible** and can run in parallel:
+
+- Prefer **one task per layer/slice** (config, models, repositories, services, controllers,
+  routes, middlewares) and/or **per domain/entity**.
+- Record **dependencies** (e.g. controllers depend on services) and group tasks into **waves**:
+  everything in a wave runs in parallel; dependent tasks go to later waves.
+- Track tasks explicitly, each with a clear, verifiable done-criterion.
+
+### 3.3 Orchestrate parallel subagents in worktrees
+
+For each task in the current wave, dispatch **one subagent in its own git worktree** so
+concurrent edits never collide:
+
+- Create an isolated worktree per task (`git worktree add`), on its own branch.
+- The subagent refactors **only its slice**, following [`refactoring-playbook.md`](./refactoring-playbook.md)
+  and the layer responsibilities in [`design-patterns-catalog.md`](./design-patterns-catalog.md);
+  it must **preserve the route surface** from Phase 1.
+- Run the wave's subagents **concurrently**; wait for the whole wave to finish before the next
+  (the wave boundary is the dependency barrier).
+
+### 3.4 Integrate
+
+The orchestrator (not the subagents) merges each worktree back into the working branch,
+resolves conflicts, and removes the worktree. Keep changes incremental and reviewable.
+
+### 3.5 Verify against the toolchain
+
+After integrating a wave (and at the end), run the commands discovered in 3.1, in order:
+
+1. install deps → 2. **format** → 3. **lint** → 4. **build/compile** → 5. **test**.
+6. **Boot** the app and confirm **every original endpoint responds** (route surface from Phase 1).
+
+Capture every failure with its output.
+
+### 3.6 Loop until 100% functional
+
+If anything fails (format/lint/build/test/boot/endpoint) or any audited anti-pattern remains,
+create **fix tasks**, re-dispatch subagents (3.3), integrate, and **re-verify**. Repeat —
+agent-in-the-loop — **for as many iterations as needed**. Declare completion only when **all**
+hold at once:
+
+- formatter clean · linter clean · build passes · tests pass
+- app boots · every original endpoint responds
+- no audited anti-pattern remains in the touched code
+
+Then print:
+
+```
+================================
+PHASE 3: REFACTORING COMPLETE
+================================
+Structure:   <new MVC layout>
+Toolchain:   format ✓ | lint ✓ | build ✓ | test ✓
+Validation:  app boots ✓ | endpoints respond ✓ | anti-patterns resolved ✓
+================================
+```
 
 ---
 
@@ -146,8 +226,8 @@ original endpoint still responds**.
 | [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) | Anti-pattern catalog (signals, severity, impact, fix) + deprecated | ✅ |
 | [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics | ✅ |
 | [`audit-report-template.md`](./audit-report-template.md) | Standardized audit report skeleton (Phase 2) | ✅ |
+| [`refactoring-playbook.md`](./refactoring-playbook.md) | Before/after transformations mapped to the catalog + MVC target layout (Phase 3) | ✅ |
 | *(pending)* detailed analysis heuristics | Dedicated Phase 1 reference (currently summarized inline above) | ⏳ |
-| *(pending)* refactoring playbook | ≥8 before/after transformations for Phase 3 | ⏳ |
 
 > **Self-contained and copyable:** the skill references no paths outside this folder, so it
 > can be copied into other projects without changes. Do not assume a specific stack.
