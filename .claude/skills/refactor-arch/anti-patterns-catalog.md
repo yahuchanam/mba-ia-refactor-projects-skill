@@ -1,47 +1,45 @@
-# Catálogo de Anti-Patterns
+# Anti-Pattern Catalog
 
-Catálogo **agnóstico de stack** para classificar achados de auditoria em qualquer backend,
-independente de linguagem, framework ou nível de organização. Cada entrada traz **sinais de
-detecção acionáveis** (grep-áveis, não genéricos), **severidade**, **impacto** e **direção de
-correção**.
+A **stack-agnostic** catalog for classifying audit findings in any backend, regardless of
+language, framework, or level of organization. Each entry carries **actionable detection
+signals** (greppable, not generic), **severity**, **impact**, and **fix direction**.
 
-## Escala de severidade
+## Severity scale
 
-| Nível | Definição |
+| Level | Definition |
 |---|---|
-| 🔴 **CRITICAL** | Falha grave de arquitetura/segurança: expõe dados sensíveis (credenciais hardcoded, SQL Injection) ou viola completamente a separação de responsabilidades (God Class com DB + lógica + roteamento juntos). |
-| 🟠 **HIGH** | Forte violação de MVC/SOLID que dificulta muito manutenção e testes: regra de negócio presa em controllers, acoplamento sem DI, estado global mutável. |
-| 🟡 **MEDIUM** | Padronização, duplicação ou performance moderada: queries N+1, validações ausentes, uso inadequado de middlewares. |
-| 🟢 **LOW** | Legibilidade, nomenclatura ruim, magic numbers. |
-| ⏳ **DEPRECATED** | Uso de API obsoleta; severidade efetiva varia (em geral LOW–MEDIUM) conforme risco de quebra. |
+| 🔴 **CRITICAL** | Serious architecture/security failure: exposes sensitive data (hardcoded credentials, SQL Injection) or completely violates separation of concerns (God Class mixing DB + logic + routing). |
+| 🟠 **HIGH** | Strong MVC/SOLID violation that severely hampers maintenance and testing: business logic trapped in controllers, coupling without DI, mutable global state. |
+| 🟡 **MEDIUM** | Standardization, duplication, or moderate performance: N+1 queries, missing validation, improper middleware use. |
+| 🟢 **LOW** | Readability, poor naming, magic numbers. |
+| ⏳ **DEPRECATED** | Use of an obsolete API; effective severity varies (usually LOW–MEDIUM) with the breakage risk. |
 
-## Catálogo
+## Catalog
 
-| Anti-pattern | Severidade | Sinais | Impacto | Correção |
+| Anti-pattern | Severity | Signals | Impact | Fix |
 |---|:---:|---|---|---|
-| **SQL Injection** | 🔴 CRITICAL | SQL montado com concatenação/f-string/template interpolando entrada do usuário em `execute/query/run`, em vez de placeholders (`?`, `:nome`, `$1`) | Leitura/alteração/destruição de dados e bypass de autenticação | Queries parametrizadas / query builder / ORM |
-| **Segredos e credenciais hardcoded** | 🔴 CRITICAL | Literais de `SECRET_KEY`/senha/API key/token no código; ausência de `.env` ou variáveis de ambiente (mesmo com lib de env instalada) | Segredo versionado e exposto; sessão/integração comprometível | Carregar de ambiente/secret manager; remover do histórico |
-| **Exposição de dados sensíveis** | 🔴 CRITICAL | Campo de senha/segredo presente na serialização de saída; `print`/log de cartão, token, chave ou PII | Vazamento direto de credenciais/PII para clientes ou logs | DTO de saída sem campos sensíveis; redigir/filtrar logs |
-| **Armazenamento inseguro de senha** | 🔴 CRITICAL | Senha gravada sem hash; `md5`/`sha1` para senha; função de hashing artesanal; comparação direta de senha | Senhas quebráveis/expostas; autenticação não confiável | `bcrypt`/`argon2`/`werkzeug.security` com salt |
-| **God Class / God Module** | 🔴 CRITICAL | Uma classe/arquivo detém a conexão de banco, registra rotas **e** implementa regra de negócio; arquivo "model" que também faz negócio | Zero testabilidade isolada; qualquer mudança arrisca tudo; viola SRP/MVC | Separar em config / model / repository / service / controller |
-| **Endpoint de execução arbitrária** | 🔴 CRITICAL | Rota que recebe SQL/comando do corpo e executa direto; rota destrutiva sem autenticação | RCE-equivalente sobre o banco; cliente lê/escreve/reseta tudo | Remover; substituir por operações específicas autenticadas |
-| **Regra de negócio na camada errada** | 🟠 HIGH | Cálculo/agregação/orquestração de domínio dentro do handler de rota ou do acesso a dados; controllers "gordos"; service layer ausente ou ignorada | Regra não testável sem HTTP/DB, espalhada e divergente | Mover regra para service layer; controller só orquestra HTTP |
-| **Estado global mutável** | 🟠 HIGH | Conexão/variável global mutável; objeto exportado e mutado por outro módulo; singleton compartilhado entre threads | Condições de corrida, acoplamento global, estado não isolável; vazamento de memória | Escopo por request / injeção; cache com ciclo de vida explícito |
-| **Side-effects de infraestrutura no controller** | 🟠 HIGH | Controller disparando e-mail/SMS/push/notificação direto, sem service/fila | Controller acoplado a infra, impossível testar/mockar; mistura HTTP com entrega | Extrair para service/notification layer; idealmente assíncrono |
-| **Acoplamento sem injeção de dependência** | 🟠 HIGH | Dependências concretas instanciadas no construtor/topo; imports diretos de implementação; sem interface/inversão | Impossível trocar/mocar banco ou serviços sem editar a classe | Injetar dependências (construtor/factory/container) |
-| **Camadas mortas / dependência que não flui** | 🟠 HIGH | Service/util definido e **nunca importado**; controllers reimplementam o que a camada já oferece (validação/serialização) | Ilusão de arquitetura; duas fontes da verdade; manutenção pior | Ligar as camadas ou remover o código morto; uma fonte da verdade |
-| **Autenticação quebrada + escalada de privilégio** | 🟠 HIGH | Token previsível/fake; rotas destrutivas sem guarda de auth; campo `role`/permissão aceito do corpo da request (mass-assignment) | Sem controle de acesso real; cliente vira admin ou apaga dados | Auth real verificada, middleware de autorização, allow-list de campos |
-| **Callback hell / orquestração assíncrona pobre** | 🟠 HIGH | Fluxo de negócio aninhado em vários callbacks (pyramid of doom); coordenação manual com contadores em vez de `Promise.all`/`async-await` | Ilegível, frágil, difícil de testar; lógica de término propensa a bug | `async/await` + driver com Promises; transações |
-| **Query N+1** | 🟡 MEDIUM | Query dentro de laço; acesso a relação disparando lazy-load por item; uma query por elemento da coleção | Queries proporcionais ao volume; degradação de performance | `JOIN`/eager loading/agregação em SQL |
-| **Lógica duplicada** | 🟡 MEDIUM | Blocos de validação copiados entre handlers; mesma serialização repetida; mesma regra em vários arquivos | Correção precisa ser replicada; fonte de divergência/bug | Extrair validadores/serializers/utilitários reutilizáveis |
-| **Validação de entrada ausente ou fraca** | 🟡 MEDIUM | Rota sem validação de formato (e-mail, data, tipos); valida só presença; sem schema | Dados inválidos persistidos; erros tardios | Validação por schema na borda; mensagens consistentes |
-| **Tratamento de erro pobre + log via `print`** | 🟡 MEDIUM | `except`/`catch` sem ação; callbacks que ignoram o erro; `print`/`console.log` para log; respostas de erro inconsistentes | Falhas mascaradas; sem observabilidade | Logging estruturado; error handler central; exceções específicas |
-| **Falta de integridade referencial** | 🟡 MEDIUM | Schema sem FK/`ON DELETE CASCADE`; `DELETE` do pai que deixa filhos órfãos | Dados órfãos/inconsistentes; relatórios contam registros quebrados | FKs + cascade ou tratamento transacional explícito |
-| **Listagem sem paginação** | 🟡 MEDIUM | Retorno de toda a tabela (`.all()`/`SELECT *`); ausência de `limit`/`offset`/cursor | Payload e memória sem limite; latência | Paginação (limit/offset ou cursor) com defaults sãos |
-| **Magic numbers / literais sem nome** | 🟢 LOW | Números/strings de negócio soltos (limites, faixas, percentuais) sem constante nomeada | Intenção obscura; difícil de ajustar com segurança | Constantes/config nomeadas |
-| **Nomenclatura ruim / shadowing** | 🟢 LOW | Builtin sombreado; variáveis de uma letra; mistura de idiomas | Legibilidade e consistência reduzidas | Nomes descritivos e consistentes |
-| **Código morto / imports não usados** | 🟢 LOW | Import sem uso; função definida e nunca chamada; coluna/campo criado e nunca lido | Ruído; confusão sobre o que está em uso | Remover; manter só o que é usado |
-| **Código verboso / não-idiomático** | 🟢 LOW | `if cond: return True else: return False`; `type(x) == list`; ifs aninhados para um booleano; dict montado à mão onde há serializer | Manutenção e legibilidade reduzidas | Retornar a expressão booleana; `isinstance`; reuso de serializer |
-| **Formato de resposta inconsistente** | 🟢 LOW | Envelopes que variam (objeto cru/texto/wrapper); códigos de status irregulares entre rotas | Contrato imprevisível para o cliente | Padronizar envelope e códigos (response/error handler) |
-| **Uso de API deprecated** | ⏳ DEPRECATED | Import/uso de símbolo marcado como deprecated na versão da lib em uso; padrão substituído por API mais nova (ex.: `datetime.utcnow()`, API de ORM legada tipo `query.get()`, callbacks onde há Promise, hashing artesanal) | Quebra futura, avisos de deprecação, comportamento sutil incorreto (ex.: datetime *naive*) | Migrar ao equivalente moderno (ex.: `datetime.now(UTC)`, `session.get()`, `async/await`, `bcrypt`/`argon2`) |
-
+| **SQL Injection** | 🔴 CRITICAL | SQL built with concatenation/f-string/template interpolating user input into `execute/query/run`, instead of placeholders (`?`, `:name`, `$1`) | Read/alter/destroy data and authentication bypass | Parameterized queries / query builder / ORM |
+| **Hardcoded secrets and credentials** | 🔴 CRITICAL | Literal `SECRET_KEY`/password/API key/token in code; no `.env` or environment variables (even with an env lib installed) | Versioned, exposed secret; session/integration compromisable | Load from environment/secret manager; remove from history |
+| **Sensitive data exposure** | 🔴 CRITICAL | Password/secret field present in output serialization; `print`/log of card, token, key, or PII | Direct leak of credentials/PII to clients or logs | Output DTO without sensitive fields; redact/filter logs |
+| **Insecure password storage** | 🔴 CRITICAL | Password stored without hashing; `md5`/`sha1` for passwords; homemade hashing function; direct password comparison | Crackable/exposed passwords; unreliable authentication | `bcrypt`/`argon2`/`werkzeug.security` with salt |
+| **God Class / God Module** | 🔴 CRITICAL | One class/file holds the DB connection, registers routes **and** implements business logic; a "model" file that also does business | Zero isolated testability; any change risks everything; violates SRP/MVC | Split into config / model / repository / service / controller |
+| **Arbitrary execution endpoint** | 🔴 CRITICAL | Route that takes SQL/command from the body and runs it directly; destructive route without authentication | RCE-equivalent over the database; clients read/write/reset everything | Remove; replace with specific authenticated operations |
+| **Business logic in the wrong layer** | 🟠 HIGH | Domain calculation/aggregation/orchestration inside the route handler or data access; "fat" controllers; service layer absent or ignored | Logic untestable without HTTP/DB, scattered and divergent | Move logic to the service layer; controller only orchestrates HTTP |
+| **Mutable global state** | 🟠 HIGH | Mutable global connection/variable; object exported and mutated by another module; singleton shared across threads | Race conditions, global coupling, state not isolatable; memory leak | Per-request scope / injection; cache with explicit lifecycle |
+| **Infrastructure side-effects in the controller** | 🟠 HIGH | Controller firing email/SMS/push/notification directly, with no service/queue | Controller coupled to infra, impossible to test/mock; mixes HTTP with delivery | Extract to a service/notification layer; ideally async |
+| **Coupling without dependency injection** | 🟠 HIGH | Concrete dependencies instantiated in the constructor/top; direct implementation imports; no interface/inversion | Impossible to swap/mock the DB or services without editing the class | Inject dependencies (constructor/factory/container) |
+| **Dead layers / dependency that doesn't flow** | 🟠 HIGH | Service/util defined and **never imported**; controllers reimplement what the layer already offers (validation/serialization) | Illusion of architecture; two sources of truth; worse maintenance | Wire the layers or remove the dead code; one source of truth |
+| **Broken authentication + privilege escalation** | 🟠 HIGH | Predictable/fake token; destructive routes without an auth guard; `role`/permission field accepted from the request body (mass-assignment) | No real access control; client becomes admin or deletes data | Real verified auth, authorization middleware, field allow-list |
+| **Callback hell / poor async orchestration** | 🟠 HIGH | Business flow nested in many callbacks (pyramid of doom); manual coordination with counters instead of `Promise.all`/`async-await` | Unreadable, fragile, hard to test; termination logic bug-prone | `async/await` + Promise-based driver; transactions |
+| **N+1 query** | 🟡 MEDIUM | Query inside a loop; relation access triggering a lazy-load per item; one query per collection element | Queries proportional to volume; performance degradation | `JOIN`/eager loading/aggregation in SQL |
+| **Duplicated logic** | 🟡 MEDIUM | Validation blocks copied across handlers; same serialization repeated; same rule in several files | Fixes must be replicated; source of divergence/bugs | Extract reusable validators/serializers/utilities |
+| **Missing or weak input validation** | 🟡 MEDIUM | Route without format validation (email, date, types); validates presence only; no schema | Invalid data persisted; late errors | Schema validation at the edge; consistent messages |
+| **Poor error handling + logging via `print`** | 🟡 MEDIUM | `except`/`catch` with no action; callbacks ignoring the error; `print`/`console.log` for logging; inconsistent error responses | Masked failures; no observability | Structured logging; central error handler; specific exceptions |
+| **Missing referential integrity** | 🟡 MEDIUM | Schema without FK/`ON DELETE CASCADE`; `DELETE` of the parent that leaves orphan children | Orphan/inconsistent data; reports count broken records | FKs + cascade or explicit transactional handling |
+| **Listing without pagination** | 🟡 MEDIUM | Returning the whole table (`.all()`/`SELECT *`); no `limit`/`offset`/cursor | Unbounded payload and memory; latency | Pagination (limit/offset or cursor) with sane defaults |
+| **Magic numbers / unnamed literals** | 🟢 LOW | Loose business numbers/strings (limits, ranges, percentages) without a named constant | Obscure intent; hard to adjust safely | Named constants/config |
+| **Poor naming / shadowing** | 🟢 LOW | Shadowed builtin; single-letter variables; mixed languages | Reduced readability and consistency | Descriptive, consistent names |
+| **Dead code / unused imports** | 🟢 LOW | Unused import; function defined and never called; column/field created and never read | Noise; confusion about what is in use | Remove; keep only what is used |
+| **Verbose / non-idiomatic code** | 🟢 LOW | `if cond: return True else: return False`; `type(x) == list`; nested ifs for a boolean; dict built by hand where a serializer exists | Reduced maintenance and readability | Return the boolean expression; `isinstance`; reuse the serializer |
+| **Inconsistent response shape** | 🟢 LOW | Varying envelopes (raw object/text/wrapper); irregular status codes across routes | Unpredictable contract for the client | Standardize envelope and codes (response/error handler) |
+| **Use of deprecated API** | ⏳ DEPRECATED | Import/use of a symbol marked deprecated in the lib version in use; pattern superseded by a newer API (e.g., `datetime.utcnow()`, legacy ORM API like `query.get()`, callbacks where a Promise exists, homemade hashing) | Future breakage, deprecation warnings, subtly incorrect behavior (e.g., naive datetime) | Migrate to the modern equivalent (e.g., `datetime.now(UTC)`, `session.get()`, `async/await`, `bcrypt`/`argon2`) |

@@ -1,51 +1,51 @@
-# Template do Relatório de Auditoria
+# Audit Report Template
 
 ```markdown
 ================================
 ARCHITECTURE AUDIT REPORT
 ================================
-Projeto:       {{nome-do-projeto}}
-Stack:         {{linguagem}} + {{framework}} ({{persistência}})
-Arquitetura:   {{resumo da arquitetura atual}}
-Arquivos:      {{N}} analisados | ~{{LOC}} linhas
-Data:          {{YYYY-MM-DD}}
+Project:       {{project-name}}
+Stack:         {{language}} + {{framework}} ({{persistence}})
+Architecture:  {{summary of current architecture}}
+Files:         {{N}} analyzed | ~{{LOC}} lines
+Date:          {{YYYY-MM-DD}}
 
-## Resumo
+## Summary
 CRITICAL: {{n}} | HIGH: {{n}} | MEDIUM: {{n}} | LOW: {{n}} | DEPRECATED: {{n}}
-Total: {{N}} achados
+Total: {{N}} findings
 
-## Achados
+## Findings
 
-### [CRITICAL] 1. <Nome do anti-pattern>
-- **Arquivo:** <caminho:linha>
-- **Descrição:** <o que foi encontrado>
-- **Impacto:** <consequência>
-- **Recomendação:** <direção de correção>
+### [CRITICAL] 1. <Anti-pattern name>
+- **File:** <path:line>
+- **Description:** <what was found>
+- **Impact:** <consequence>
+- **Recommendation:** <fix direction>
 
-### [HIGH] 2. <Nome do anti-pattern>
-- **Arquivo:** <caminho:linha>
-- **Descrição:** ...
-- **Impacto:** ...
-- **Recomendação:** ...
+### [HIGH] 2. <Anti-pattern name>
+- **File:** <path:line>
+- **Description:** ...
+- **Impact:** ...
+- **Recommendation:** ...
 
-### [MEDIUM] 3. <Nome do anti-pattern>
-- **Arquivo:** <caminho:linha>
-- **Descrição:** ...
-- **Impacto:** ...
-- **Recomendação:** ...
+### [MEDIUM] 3. <Anti-pattern name>
+- **File:** <path:line>
+- **Description:** ...
+- **Impact:** ...
+- **Recommendation:** ...
 
-### [LOW] 4. <Nome do anti-pattern>
-- **Arquivo:** <caminho:linha>
-- **Descrição:** ...
-- **Impacto:** ...
-- **Recomendação:** ...
+### [LOW] 4. <Anti-pattern name>
+- **File:** <path:line>
+- **Description:** ...
+- **Impact:** ...
+- **Recommendation:** ...
 
-## APIs Deprecated
-- **<API obsoleta>** em <caminho:linha> → usar **<equivalente moderno>**
+## Deprecated APIs
+- **<obsolete API>** at <path:line> → use **<modern equivalent>**
 
 ================================
-Total: {{N}} achados
+Total: {{N}} findings
 ================================
 
-Relatório somente leitura — nenhum arquivo foi modificado.
+Read-only report — no file was modified.
 ```

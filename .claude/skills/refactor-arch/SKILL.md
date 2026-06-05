@@ -1,149 +1,153 @@
 ---
 name: refactor-arch
-description: >-
-  Analisa, audita e refatora backends legados para o padrão MVC — agnóstico de
-  linguagem e framework. Detecta a stack, mapeia a arquitetura, cruza o código
-  contra um catálogo de anti-patterns e gera um relatório de auditoria; então
-  PAUSA para confirmação humana (HITL) antes de qualquer refatoração. Use ao
-  herdar/avaliar um backend legado, fazer auditoria de arquitetura/segurança,
-  ou planejar migração para MVC.
+description: Analyzes, audits, and refactors legacy backends to the MVC pattern — language- and framework-agnostic. Detects the stack, maps the architecture, cross-references the code against an anti-pattern catalog, and produces an audit report; then PAUSES for human confirmation (HITL) before any refactoring. Use when inheriting/assessing a legacy backend, running an architecture/security audit, or planning a migration to MVC.
+trigger: /refactor-arch
 ---
 
 # refactor-arch
 
-Skill que conduz a avaliação e a evolução arquitetural de um backend legado como um
-**workflow de 3 fases com human-in-the-loop (HITL)**. As Fases 1 e 2 são **somente
-leitura** — nenhum arquivo é modificado. A Fase 3 (refatoração) só inicia após
-**confirmação humana explícita** do relatório de auditoria.
+Skill that drives the assessment and architectural evolution of a legacy backend as a
+**3-phase workflow with human-in-the-loop (HITL)**. Phases 1 and 2 are **read-only** — no
+file is modified. Phase 3 (refactoring) only starts after **explicit human confirmation**
+of the audit report.
 
-> ⚠️ **Esta versão implementa as Fases 1 e 2 + o gate de confirmação.** A Fase 3
-> (refatoração para MVC) ainda **não** está implementada nesta skill — ao chegar no gate,
-> a skill para e aguarda. Veja [Fase 3](#fase-3--refatoração-pendente).
+> ⚠️ **This version implements Phases 1 and 2 + the confirmation gate.** Phase 3
+> (refactoring to MVC) is **not** yet implemented in this skill — upon reaching the gate,
+> the skill stops and waits. See [Phase 3](#phase-3--refactoring-pending).
 
-## Visão geral do workflow
+## Workflow overview
 
+```mermaid
+flowchart TD
+    F1["Phase 1 — Analysis<br/>detect stack and map architecture"]
+    F2["Phase 2 — Audit<br/>findings report CRITICAL→LOW"]
+    GATE{"🛑 HITL gate<br/>human confirmation required"}
+    F3["Phase 3 — Refactoring<br/>MVC + validation · pending"]
+
+    F1 -->|read-only| F2
+    F2 -->|read-only| GATE
+    GATE -->|yes| F3
+    GATE -.->|no / request changes| F2
 ```
-┌── Fase 1 ─────────┐   ┌── Fase 2 ──────────┐   ┌─🛑 HITL ─────┐   ┌── Fase 3 ──────┐
-│ Análise           │ → │ Auditoria          │ → │ Confirmação  │ → │ Refatoração    │
-│ (detecta stack,   │   │ (relatório de      │   │ humana       │   │ (MVC + valida) │
-│  mapeia arquit.)  │   │  achados CRIT→LOW) │   │ obrigatória  │   │  [pendente]    │
-└───────────────────┘   └────────────────────┘   └──────────────┘   └────────────────┘
-        somente leitura ──────────────────────────►│ gate │◄──── modifica arquivos
-```
 
-**Princípio inviolável:** nenhuma escrita/edição/remoção de arquivo do projeto-alvo antes
-do gate de confirmação. Em caso de dúvida, pare e pergunte.
+- **Phases 1–2:** read-only — no file is modified.
+- **Gate:** passes only with explicit human approval.
+- **Phase 3:** modifies files; happens only after the gate.
+
+**Inviolable principle:** no writing/editing/deleting any target-project file before the
+confirmation gate. When in doubt, stop and ask.
 
 ---
 
-## Fase 1 — Análise
+## Phase 1 — Analysis
 
-**Objetivo:** detectar linguagem, framework, banco de dados e mapear a arquitetura atual.
-**Saída:** um resumo impresso. **Não modifica nada.**
+**Goal:** detect language, framework, database, and map the current architecture.
+**Output:** a printed summary. **Modifies nothing.**
 
-### Heurísticas de detecção (agnósticas)
+### Detection heuristics (agnostic)
 
-| Alvo | Sinais |
+| Target | Signals |
 |---|---|
-| **Linguagem** | `requirements.txt`/`*.py` → Python · `package.json`/`*.js`/`*.ts` → Node · `go.mod` → Go · `Gemfile` → Ruby · `composer.json` → PHP |
+| **Language** | `requirements.txt`/`*.py` → Python · `package.json`/`*.js`/`*.ts` → Node · `go.mod` → Go · `Gemfile` → Ruby · `composer.json` → PHP |
 | **Framework** | `Flask(__name__)`/`flask==` → Flask · `fastapi`/`APIRouter` → FastAPI · `manage.py`/`settings.py` → Django · `require('express')` → Express |
-| **Banco** | `sqlite3.connect`/`new sqlite3.Database` → SQLite cru · `flask_sqlalchemy`/`db.Model` → SQLAlchemy · `psycopg2`/`mysql.connector`/`mongoose` → Postgres/MySQL/Mongo · strings `CREATE TABLE`/`SELECT … FROM` → SQL manual |
-| **Arquitetura** | tudo em 1 arquivo ou 1 classe "faz-tudo" → monólito/God Class · arquivos por papel importando-se direto, sem service/config → separação nominal · pastas `models/ routes/ services/ utils/` + blueprints/DI → camadas parciais |
-| **Entry point / rotas** | bloco de bootstrap (`app.run`, `app.listen`, `if __name__ == "__main__"`); contar método+path dá a **superfície de rotas** a preservar |
+| **Database** | `sqlite3.connect`/`new sqlite3.Database` → raw SQLite · `flask_sqlalchemy`/`db.Model` → SQLAlchemy · `psycopg2`/`mysql.connector`/`mongoose` → Postgres/MySQL/Mongo · `CREATE TABLE`/`SELECT … FROM` strings → manual SQL |
+| **Architecture** | everything in 1 file or 1 "do-it-all" class → monolith/God Class · files split by role but importing each other directly, no service/config → nominal separation · `models/ routes/ services/ utils/` folders + blueprints/DI → partial layering |
+| **Entry point / routes** | bootstrap block (`app.run`, `app.listen`, `if __name__ == "__main__"`); counting method+path gives the **route surface** to preserve |
 
-### Passos
+### Steps
 
-1. Listar os arquivos-fonte e dependências (sem executar o projeto).
-2. Aplicar as heurísticas acima para identificar stack e arquitetura.
-3. Mapear tabelas/entidades e a superfície de rotas (método + path).
-4. Imprimir o resumo no formato:
+1. List source files and dependencies (without running the project).
+2. Apply the heuristics above to identify stack and architecture.
+3. Map tables/entities and the route surface (method + path).
+4. Print the summary in the format:
 
 ```
 ================================
 PHASE 1: PROJECT ANALYSIS
 ================================
-Language:      <linguagem>
-Framework:     <framework + versão>
-Persistence:   <banco + driver/ORM>
-Domain:        <domínio inferido>
-Architecture:  <resumo da arquitetura atual>
-Entry point:   <arquivo + como sobe>
+Language:      <language>
+Framework:     <framework + version>
+Persistence:   <database + driver/ORM>
+Domain:        <inferred domain>
+Architecture:  <summary of current architecture>
+Entry point:   <file + how it boots>
 Source files:  <N> analyzed (~<LOC> LOC)
-DB tables:     <tabelas>
-Endpoints:     <contagem + destaques>
+DB tables:     <tables>
+Endpoints:     <count + highlights>
 ================================
 ```
 
 ---
 
-## Fase 2 — Auditoria
+## Phase 2 — Audit
 
-**Objetivo:** cruzar o código contra o catálogo de anti-patterns e emitir um relatório
-estruturado. **Não modifica nada.**
+**Goal:** cross-reference the code against the anti-pattern catalog and emit a structured
+report. **Modifies nothing.**
 
-### Passos
+### Steps
 
-1. Para cada entrada do [`anti-patterns-catalog.md`](./anti-patterns-catalog.md), procurar
-   os **sinais de detecção** no código. Registrar cada ocorrência com `arquivo:linha` exato.
-2. Classificar cada achado pela **severidade** do catálogo (CRITICAL / HIGH / MEDIUM / LOW)
-   e verificar **APIs deprecated** (seção própria do catálogo).
-3. Preencher o relatório seguindo **exatamente** o [`audit-report-template.md`](./audit-report-template.md):
-   cabeçalho, resumo com contagem por severidade, achados **ordenados CRITICAL → LOW**, e a
-   seção de APIs Deprecated.
-4. Salvar o relatório em `reports/audit-project-<N>.md` (criar a pasta `reports/` se preciso).
-5. Apresentar o relatório ao usuário e **seguir para o gate**.
+1. For each entry in [`anti-patterns-catalog.md`](./anti-patterns-catalog.md), search for the
+   **detection signals** in the code. Record every occurrence with an exact `file:line`.
+2. Classify each finding by the catalog **severity** (CRITICAL / HIGH / MEDIUM / LOW) and
+   check for **deprecated APIs** (the catalog's own section).
+3. Fill the report following the [`audit-report-template.md`](./audit-report-template.md)
+   **exactly**: header, summary with counts by severity, findings **ordered CRITICAL → LOW**,
+   and the Deprecated APIs section.
+4. Save the report to `reports/audit-project-<N>.md` (create the `reports/` folder if needed).
+5. Present the report to the user and **proceed to the gate**.
 
-> O catálogo de princípios [`design-patterns-catalog.md`](./design-patterns-catalog.md)
-> (SOLID, DRY, KISS, YAGNI, MVC, Object Calisthenics) é a régua-alvo: cada achado deve
-> apontar para qual princípio a correção aproxima o código.
+> The principles catalog [`design-patterns-catalog.md`](./design-patterns-catalog.md)
+> (SOLID, DRY, KISS, YAGNI, MVC, Object Calisthenics) is the target ruler: each finding
+> should point to which principle the fix moves the code toward.
 
-### Critérios mínimos do relatório
+### Minimum report criteria
 
-- ≥ 5 achados, incluindo ≥ 1 CRITICAL ou HIGH.
-- Cada achado com `arquivo:linha` e os campos do template (Descrição, Impacto, Recomendação).
-- Achados ordenados por severidade; deprecated em seção própria.
-
----
-
-## 🛑 Gate de confirmação (HITL)
-
-Ao terminar a Fase 2, a skill **PARA**. Antes de qualquer modificação:
-
-1. Confirme em voz alta que **nenhum arquivo do projeto-alvo foi alterado** até aqui.
-2. Apresente o resumo do relatório (contagem por severidade + total).
-3. Pergunte explicitamente ao usuário, e **aguarde resposta**:
-
-   > "Fase 2 concluída — relatório salvo em `reports/audit-project-<N>.md` (somente leitura).
-   > Deseja que eu prossiga com a refatoração para MVC? Responda **sim** para continuar, ou
-   > peça ajustes/esclarecimentos antes."
-
-4. **Não prossiga** sem um "sim" (ou equivalente) explícito do usuário. Pedidos de
-   esclarecimento, ajuste de achados ou nova auditoria **não** contam como aprovação.
+- ≥ 5 findings, including ≥ 1 CRITICAL or HIGH.
+- Each finding with `file:line` and the template fields (Description, Impact, Recommendation).
+- Findings ordered by severity; deprecated in its own section.
 
 ---
 
-## Fase 3 — Refatoração (pendente)
+## 🛑 Confirmation gate (HITL)
 
-> 🚧 **Não implementada nesta versão da skill.** Mesmo após o "sim" no gate, esta versão
-> não executa a refatoração: informe ao usuário que a Fase 3 será adicionada numa próxima
-> iteração (depende do *playbook de refatoração* e das *guidelines de MVC* detalhadas).
+When Phase 2 ends, the skill **STOPS**. Before any modification:
 
-Quando implementada, a Fase 3 deverá: reestruturar para MVC (config sem segredos, models,
-repositório/queries parametrizadas, service layer, controllers finos, error handling
-central, entry point limpo), **e validar** que a aplicação sobe sem erros e que **todos os
-endpoints originais continuam respondendo**.
+1. State explicitly that **no target-project file has been changed** so far.
+2. Present the report summary (counts by severity + total).
+3. Tell the user the report was saved to `reports/audit-project-<N>.md` (read-only) and print
+   the confirmation line **exactly** as below, then **wait for the answer**:
+
+```
+Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]
+```
+
+4. **Do not proceed** without an explicit `y` (or "yes"/equivalent) from the user. `n`,
+   requests for clarification, finding adjustments, or a new audit **do not** count as approval.
 
 ---
 
-## Arquivos de referência
+## Phase 3 — Refactoring (pending)
 
-| Arquivo | Conteúdo | Status |
+> 🚧 **Not implemented in this version of the skill.** Even after a `y` at the gate, this
+> version does not perform the refactoring: tell the user that Phase 3 will be added in a
+> later iteration (it depends on the detailed *refactoring playbook* and *MVC guidelines*).
+
+When implemented, Phase 3 must: restructure to MVC (config without secrets, models,
+repository/parameterized queries, service layer, thin controllers, central error handling,
+clean entry point), **and validate** that the app boots without errors and that **every
+original endpoint still responds**.
+
+---
+
+## Reference files
+
+| File | Content | Status |
 |---|---|---|
-| [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) | Catálogo de anti-patterns (sinais, severidade, impacto, correção) + deprecated | ✅ |
-| [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Princípios-alvo: SOLID, DRY, KISS, YAGNI, MVC (camadas), Object Calisthenics | ✅ |
-| [`audit-report-template.md`](./audit-report-template.md) | Esqueleto padronizado do relatório de auditoria (Fase 2) | ✅ |
-| *(pendente)* heurísticas de análise detalhadas | Referência dedicada da Fase 1 (hoje resumida inline acima) | ⏳ |
-| *(pendente)* playbook de refatoração | ≥8 transformações antes/depois para a Fase 3 | ⏳ |
+| [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) | Anti-pattern catalog (signals, severity, impact, fix) + deprecated | ✅ |
+| [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics | ✅ |
+| [`audit-report-template.md`](./audit-report-template.md) | Standardized audit report skeleton (Phase 2) | ✅ |
+| *(pending)* detailed analysis heuristics | Dedicated Phase 1 reference (currently summarized inline above) | ⏳ |
+| *(pending)* refactoring playbook | ≥8 before/after transformations for Phase 3 | ⏳ |
 
-> **Auto-contida e copiável:** a skill não referencia caminhos fora desta pasta, podendo ser
-> copiada para outros projetos sem ajustes. Não assuma uma stack específica.
+> **Self-contained and copyable:** the skill references no paths outside this folder, so it
+> can be copied into other projects without changes. Do not assume a specific stack.
