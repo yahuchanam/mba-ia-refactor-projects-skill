@@ -11,9 +11,8 @@ Skill that drives the assessment and architectural evolution of a legacy backend
 file is modified. Phase 3 (refactoring) only starts after **explicit human confirmation**
 of the audit report.
 
-> ⚠️ **This version implements Phases 1 and 2 + the confirmation gate.** Phase 3
-> (refactoring to MVC) is **not** yet implemented in this skill — upon reaching the gate,
-> the skill stops and waits. See [Phase 3](#phase-3--refactoring-pending).
+> ⚠️ **Safety:** Phases 1–2 never modify files. Phase 3 only runs after an explicit `y` at
+> the [confirmation gate](#-confirmation-gate-hitl) — never before.
 
 ## Workflow overview
 
@@ -22,7 +21,7 @@ flowchart TD
     F1["Phase 1 — Analysis<br/>detect stack and map architecture"]
     F2["Phase 2 — Audit<br/>findings report CRITICAL→LOW"]
     GATE{"🛑 HITL gate<br/>human confirmation required"}
-    F3["Phase 3 — Refactoring<br/>MVC + validation · pending"]
+    F3["Phase 3 — Refactoring<br/>MVC + validation"]
 
     F1 -->|read-only| F2
     F2 -->|read-only| GATE
@@ -126,16 +125,44 @@ Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]
 
 ---
 
-## Phase 3 — Refactoring (pending)
+## Phase 3 — Refactoring
 
-> 🚧 **Not implemented in this version of the skill.** Even after a `y` at the gate, this
-> version does not perform the refactoring: tell the user that Phase 3 will be added in a
-> later iteration (it depends on the detailed *refactoring playbook* and *MVC guidelines*).
+**Precondition:** explicit `y` at the gate. Never start otherwise.
 
-When implemented, Phase 3 must: restructure to MVC (config without secrets, models,
-repository/parameterized queries, service layer, thin controllers, central error handling,
-clean entry point), **and validate** that the app boots without errors and that **every
-original endpoint still responds**.
+**Goal:** restructure the project to MVC, removing the audited anti-patterns, **without
+changing behavior** — every original endpoint must still respond.
+
+### Steps
+
+1. Plan the target structure using the MVC layout and layer responsibilities in
+   [`design-patterns-catalog.md`](./design-patterns-catalog.md). Adapt to the project's stack
+   and current state — a partially-layered project is improved in place, not rebuilt from scratch.
+2. For each audit finding (CRITICAL → LOW), apply the matching transformation from
+   [`refactoring-playbook.md`](./refactoring-playbook.md): move secrets to config, business
+   logic to services, data access to repositories, keep controllers thin, centralize error
+   handling, and clean the entry point (composition root).
+3. **Preserve the route surface** captured in Phase 1: same method + path → same status/shape.
+   Refactor incrementally; do not drop or rename endpoints.
+4. Update deprecated APIs to their modern equivalents.
+
+### Validation (exit criteria)
+
+Run the project and confirm:
+
+- The app **boots without errors** (the project's start command).
+- **Every original endpoint still responds** (same method + path as Phase 1).
+- No audited anti-pattern remains in the touched code.
+
+If any check fails, fix and re-validate before declaring completion. Then print:
+
+```
+================================
+PHASE 3: REFACTORING COMPLETE
+================================
+Structure:   <new MVC layout>
+Validation:  app boots ✓ | endpoints respond ✓ | anti-patterns resolved ✓
+================================
+```
 
 ---
 
@@ -146,8 +173,8 @@ original endpoint still responds**.
 | [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) | Anti-pattern catalog (signals, severity, impact, fix) + deprecated | ✅ |
 | [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics | ✅ |
 | [`audit-report-template.md`](./audit-report-template.md) | Standardized audit report skeleton (Phase 2) | ✅ |
+| [`refactoring-playbook.md`](./refactoring-playbook.md) | Before/after transformations mapped to the catalog + MVC target layout (Phase 3) | ✅ |
 | *(pending)* detailed analysis heuristics | Dedicated Phase 1 reference (currently summarized inline above) | ⏳ |
-| *(pending)* refactoring playbook | ≥8 before/after transformations for Phase 3 | ⏳ |
 
 > **Self-contained and copyable:** the skill references no paths outside this folder, so it
 > can be copied into other projects without changes. Do not assume a specific stack.
