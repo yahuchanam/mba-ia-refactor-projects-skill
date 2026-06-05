@@ -1,7 +1,7 @@
 ---
 name: refactor-arch
 description: Analyzes, audits, and refactors legacy backends to the MVC pattern — language- and framework-agnostic. Detects the stack, maps the architecture, cross-references the code against an anti-pattern catalog, and produces an audit report; then PAUSES for human confirmation (HITL) before any refactoring. Use when inheriting/assessing a legacy backend, running an architecture/security audit, or planning a migration to MVC.
-allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(grep:*), Bash(rg:*), Bash(find:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(which:*), Bash(command:*), Bash(test:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git config:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
+allowed-tools: Read, Grep, Glob, Write, Edit, Agent, Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(grep:*), Bash(rg:*), Bash(find:*), Bash(head:*), Bash(tail:*), Bash(wc:*), Bash(which:*), Bash(command:*), Bash(test:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git config:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git checkout:*), Bash(git switch:*), Bash(git merge:*), Bash(git status:*), Bash(git diff:*), Bash(git rm:*), Bash(git stash:*), Bash(python:*), Bash(python3:*), Bash(uv:*), Bash(uvx:*), Bash(pip:*), Bash(pip3:*), Bash(pytest:*), Bash(ruff:*), Bash(black:*), Bash(flake8:*), Bash(mypy:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(make:*)
 ---
 
 # refactor-arch
@@ -51,6 +51,11 @@ confirmation gate. When in doubt, stop and ask.
   though `git ls-files` is allow-listed. To act on another directory (e.g. a worktree), run the
   command **from that directory's working context** (the worktree subagent already works there),
   not via `-C`. For listing project files, prefer the native `Glob` tool over `git ls-files`.
+- **Invoke tools by program name, not by path.** A path-qualified executable (e.g.
+  `.venv/bin/pip`, `./node_modules/.bin/eslint`) doesn't match an allow rule keyed on the program
+  name (`pip`, `eslint`). Run tools through their launcher so the program name stays stable:
+  `uv run <tool>` / `python -m <tool>` (Python), `npx <tool>` (Node). This both satisfies the
+  allow-list and avoids depending on a specific venv path.
 
 ---
 
@@ -175,6 +180,15 @@ Detect the exact commands for **this** stack by inspecting its manifests/config 
 command for each of: **install deps · format · lint · build/compile · test · run/boot**. If a
 category is missing, fall back to the language's standard tool, or define a smoke test = boot the
 app + hit every endpoint.
+
+Prefer a launcher that keeps environment + invocation self-contained (and the program name
+stable for permission matching):
+- **Python:** default to **`uv`** — `uv venv`, `uv pip install -r requirements.txt`,
+  `uv run <tool>` (it reads `requirements.txt` and PEP 621 `pyproject.toml` regardless of whether
+  the project used pip or poetry). If `uv` is unavailable, fall back to `python -m venv` +
+  `python -m pip` + `python -m <tool>`. Never invoke tools via `.venv/bin/<tool>` directly.
+- **Node:** use the project's package manager (`npm`/`pnpm`/`yarn`) and run binaries via `npx`.
+- **Other stacks:** use the ecosystem's own runner (`go`, `make`, …).
 
 ### 3.2 Plan & decompose into tasks
 
