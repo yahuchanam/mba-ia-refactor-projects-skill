@@ -462,3 +462,9 @@ arquitetura atual e catálogo de anti-patterns com severidade e `arquivo:linha`.
 | Projeto 1 — `code-smells-project` (Python/Flask) | [phase1-project-1.md](refinement/phase1-project-1.md) |
 | Projeto 2 — `ecommerce-api-legacy` (Node.js/Express) | [phase1-project-2.md](refinement/phase1-project-2.md) |
 | Projeto 3 — `task-manager-api` (Python/Flask) | [phase1-project-3.md](refinement/phase1-project-3.md) |
+
+## Construção da Skill
+
+## Resultados
+
+## Como Executar
