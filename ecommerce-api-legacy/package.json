@@ -4,10 +4,22 @@
   "description": "Boilerplate com código legado para refatoração",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js"
+    "start": "node src/app.js",
+    "format": "prettier --write \"src/**/*.js\" \"test/**/*.js\" \"eslint.config.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"test/**/*.js\" \"eslint.config.js\"",
+    "lint": "eslint src test",
+    "build": "node --check src/app.js",
+    "test": "node --test"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "sqlite3": "^5.1.6"
+    "express": "^5.2.1",
+    "sqlite3": "^6.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0",
+    "prettier": "^3.5.3",
+    "supertest": "^7.1.1"
   }
 }
