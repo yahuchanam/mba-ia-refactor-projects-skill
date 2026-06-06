@@ -465,7 +465,7 @@ arquitetura atual e catálogo de anti-patterns com severidade e `arquivo:linha`.
 
 ## Construção da Skill
 
-A skill começou como um único `SKILL.md` e evoluiu, por iterações, para um **mapa** que delega o
+A skill começou como um único `SKILL.md` e evoluiu, por iterações, para um mapa que delega o
 conhecimento a arquivos lidos sob demanda (progressive disclosure):
 
 ```
@@ -482,88 +482,111 @@ conhecimento a arquivos lidos sob demanda (progressive disclosure):
 └── scripts/safe_remove.py         # remoção guardrailed (Fase 3)
 ```
 
-**Decisões de design**
+### Estrutura
 
-- **3 fases sequenciais com 1 gate humano.** Fases 1–2 são read-only; a Fase 3 só roda após `y`
-  explícito. O gate fica sempre no mapa para nunca ser pulado.
-- **Catálogo agnóstico** (20+ anti-patterns) descrito por *sinal de detecção* e *correção*, sem
-  citar projeto/linguagem — de SQL Injection, segredos hardcoded, God Class e endpoint de execução
-  arbitrária (CRITICAL) a N+1 e validação fraca (MEDIUM) e magic numbers (LOW), com detecção de
-  APIs deprecated.
-- **Playbook em pseudocódigo neutro** (14 transformações) para não acoplar a refatoração a uma stack.
+O `SKILL.md` orquestra três fases sequenciais com um único ponto de confirmação humana. As fases 1
+e 2 são read-only; a fase 3 só inicia após `y` explícito no gate, que permanece no mapa para nunca
+ser pulado.
 
-**Como garanti que é agnóstica.** A Fase 1 detecta a stack; a Fase 3 lê apenas o
-`rules/stacks/<stack>.md` correspondente (Node, Python, Go, Ruby, PHP, JVM, .NET — instalar/subir/
-parar ambiente, testes, lint/format/build, verificação in-process). Nenhum caminho ou comando fixo
-no mapa.
+### Catálogo e playbook
 
-**Desafios encontrados e como resolvi** (a parte que mais evoluiu)
+O catálogo reúne mais de 20 anti-patterns, descritos por sinal de detecção e correção, sem citar
+projeto ou linguagem. Cobre todas as severidades — de SQL Injection, segredos hardcoded e God Class
+(CRITICAL) a N+1 e validação fraca (MEDIUM) e magic numbers (LOW) — e inclui detecção de APIs
+deprecated. As correções ficam no playbook, em pseudocódigo neutro, com 14 transformações
+antes/depois.
 
-- **Orquestração da Fase 3.** Decompõe o trabalho em tarefas paralelizáveis com heurística de
-  escala (monolito pequeno → passe in-place; projeto grande → subagentes em git worktrees) e
-  *loop até 100% verde*.
-- **Segurança vs. preservação de rotas.** Uma versão *removia* endpoints perigosos (ex.:
-  `/admin/query`) e por isso parava para perguntar no meio da Fase 3. Inverti para **securizar no
-  lugar**: SQLi → query parametrizada; rota que executa SQL/admin sem proteção → autenticação +
-  autorização. A surface de rotas nunca é reduzida e a fase roda sem novo HITL.
-- **Fricção de permissão (1-shot).** Comandos compostos (`;`, `&&`), prefixos de env (`X=Y cmd`),
-  opções antes do subcomando (`git -C`) e binários por path (`.venv/bin/pip`) disparam prompt.
-  Consolidei as regras em `execution-conventions.md` (um comando simples por chamada, programa
-  primeiro, `uv run`/`npx`), pré-autorizei via `allowed-tools` + `settings.json`, e troquei a
-  verificação de endpoints por **test client in-process** (sem servidor real nem `curl`).
+### Agnosticismo de tecnologia
+
+A fase 1 detecta a stack e a fase 3 lê apenas o `rules/stacks/<stack>.md` correspondente (Node,
+Python, Go, Ruby, PHP, JVM, .NET). Cada arquivo descreve como instalar dependências, subir e parar
+o ambiente, rodar testes e lint/format/build, e verificar as rotas in-process. O mapa não contém
+caminho ou comando fixo de stack.
+
+### Desafios e soluções
+
+Orquestração da fase 3 — a refatoração é decomposta em tarefas paralelizáveis, com escala automática
+(passe in-place para monolito pequeno; subagentes em git worktrees para projeto grande) e iteração
+até a verificação passar.
+
+Segurança sem remover rotas — uma versão removia endpoints perigosos, como `/admin/query`, e parava
+para perguntar no meio da fase 3. A regra foi invertida para corrigir no lugar: SQL Injection vira
+query parametrizada, e rota administrativa exposta sem proteção ganha autenticação e autorização. A
+superfície de rotas nunca diminui e a fase roda sem nova interrupção.
+
+Fricção de permissão — comandos compostos, prefixos de variável de ambiente, opções antes do
+subcomando (`git -C`) e binários por caminho (`.venv/bin/pip`) disparam pedidos de aprovação. As
+regras de execução foram reunidas em `execution-conventions.md`, pré-autorizadas via `allowed-tools`
+e `settings.json`, e a verificação passou a usar test client in-process, sem servidor real nem `curl`.
 
 ## Resultados
 
-**Projeto 1 — `code-smells-project` (Python/Flask, SQLite cru)** — refatorado e commitado (`0890d14`).
+### Projeto 1 — code-smells-project (Python/Flask, SQLite cru)
+
+Refatorado e commitado (`0890d14`).
 
 | Antes | Depois |
 |---|---|
 | 4 arquivos (`app.py`, `controllers.py`, `models.py`, `database.py`), ~780 LOC, monolito | MVC em camadas: `config/ models/ repositories/ services/ controllers/ routes/ middlewares/ utils/` + `tests/` |
-| SQL por concatenação · segredo hardcoded · senha em plaintext · `/admin/*` sem auth | queries parametrizadas · config via env · hash salgado · `/admin/*` atrás de autenticação/admin (`middlewares/auth.py`) |
-| sem service layer · conexão global mutável · sem paginação | services por domínio · conexão por request · `utils/pagination.py` |
+| SQL por concatenação, segredo hardcoded, senha em plaintext, `/admin/*` sem auth | queries parametrizadas, config via env, hash salgado, `/admin/*` atrás de autenticação/admin (`middlewares/auth.py`) |
+| sem service layer, conexão global mutável, sem paginação | services por domínio, conexão por request, `utils/pagination.py` |
 
-**Validação (Fase 3):** estrutura MVC ✓ · config sem hardcoded ✓ · models/serializers ✓ ·
-rotas/controllers/services separados ✓ · error handler central (`middlewares/error_handler.py`) ✓ ·
-entry point claro (`app.py` como composition root) ✓ · smoke test embarcado (`tests/test_smoke.py`) ✓ ·
-**todos os endpoints originais preservados** — incluindo `/admin/*`, agora protegidos em vez de removidos.
+#### Auditoria da fase 2
 
-**Auditoria (Fase 2):** relatório exibido na sessão (read-only; por decisão de design não é
-persistido em disco). Cobertura ≥ 5 findings com ≥ 1 CRITICAL, ordenados CRITICAL→LOW, alinhada à
+O relatório é exibido na sessão (read-only; por decisão de design não é persistido em disco). Traz
+ao menos 5 findings, com no mínimo 1 CRITICAL, ordenados de CRITICAL a LOW, alinhados à
 [análise manual](refinement/phase1-project-1.md) (7 CRITICAL/HIGH, 3 MEDIUM, demais LOW).
 
-**Projetos 2 (`ecommerce-api-legacy`, Node/Express) e 3 (`task-manager-api`, Python/Flask):**
-pendentes. A skill já traz `rules/stacks/node.md` e `python.md` para executá-los sem ajustes.
+#### Validação da fase 3
+
+- [x] Estrutura em camadas MVC
+- [x] Configuração extraída para `config/`, sem valores hardcoded
+- [x] Models e serializers
+- [x] Rotas, controllers e services separados
+- [x] Error handling central em `middlewares/error_handler.py`
+- [x] Entry point claro (`app.py` como composition root)
+- [x] Smoke test embarcado em `tests/test_smoke.py`
+- [x] Endpoints originais preservados, incluindo `/admin/*`, agora protegidos
 
 ## Como Executar
 
-**Pré-requisitos:** Claude Code instalado; Python 3 + [`uv`](https://docs.astral.sh/uv/) (ou `pip`)
-para os projetos Flask; Node 18+ para o projeto Express.
+### Pré-requisitos
 
-**Rodar a skill** (a partir da raiz de cada projeto):
+- Claude Code instalado
+- Python 3 e [`uv`](https://docs.astral.sh/uv/) (ou `pip`) para os projetos Flask
+- Node 18+ para o projeto Express
+
+### Rodar a skill
+
+### Projeto 1 - Code Smells Project
+
+A partir da raiz de cada projeto:
 
 ```bash
 cd code-smells-project
 claude "/refactor-arch"
 ```
 
-Fluxo: **Fase 1** (análise, read-only) → **Fase 2** (auditoria, read-only) → **gate**
-`Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]` → responda `y` → **Fase 3**
-(refatoração autônoma até verde). A pasta `.claude/` é a mesma nos 3 projetos via symlink, então o
-comando não muda entre eles.
+O fluxo passa pela fase 1 (análise, read-only), pela fase 2 (auditoria, read-only) e pelo gate
+`Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]`. Responda `y` para iniciar a fase 3,
+que refatora de forma autônoma até a verificação passar. A pasta `.claude/` é a mesma nos três
+projetos via symlink, então o comando não muda entre eles.
 
-**Subir o projeto 1 refatorado:**
+#### Subir o projeto refatorado
 
 ```bash
 cd code-smells-project
 uv venv
 uv pip install -r requirements.txt
-uv run python app.py          # http://localhost:5000  (cria/seeda loja.db no boot)
+uv run python app.py          # http://localhost:5000  (cria e popula loja.db no boot)
 ```
 
 Segredos vêm do ambiente (`SECRET_KEY`, `DB_PATH`), com fallback de desenvolvimento.
 
-**Validar:** a própria Fase 3 roda format/lint/test e checa as rotas in-process. Para conferir à
-mão, rode o smoke test embarcado:
+#### Validar
+
+A fase 3 roda format, lint e testes e verifica as rotas in-process. Para conferir à mão, rode o
+smoke test embarcado:
 
 ```bash
 uv run python -m pytest tests/
