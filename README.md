@@ -548,6 +548,34 @@ ao menos 5 findings, com no mínimo 1 CRITICAL, ordenados de CRITICAL a LOW, ali
 - [x] Smoke test embarcado em `tests/test_smoke.py`
 - [x] Endpoints originais preservados, incluindo `/admin/*`, agora protegidos
 
+### Projeto 2 — ecommerce-api-legacy (Node.js/Express, SQLite cru)
+
+Refatorado e commitado (`bbe8f39`).
+
+| Antes | Depois |
+|---|---|
+| 3 arquivos em `src/`, ~180 LOC, `AppManager` concentrando banco, rotas e regras de negócio | MVC em camadas: `config/ models/ repositories/ services/ controllers/ routes/ middlewares/ security/ database/` + `test/` |
+| credenciais hardcoded, cartão e chave de pagamento em log, senha em plaintext/hash caseiro, rotas administrativas sem auth | config via env, logs sem dados sensíveis, hash `scrypt` com salt, relatório e exclusão atrás de autenticação admin |
+| callbacks aninhados, relatório com N+1, conexão concreta dentro do God Class, sem integridade referencial | `async/await`, query set-based paginada, dependências injetadas, transações serializadas e foreign keys com cascade |
+
+#### Auditoria da fase 2
+
+O relatório é exibido na sessão (read-only; por decisão de design não é persistido em disco).
+Foram encontrados 18 findings: 4 CRITICAL, 5 HIGH, 5 MEDIUM, 3 LOW e 1 API deprecated, alinhados à
+[análise manual](refinement/phase1-project-2.md).
+
+#### Validação da fase 3
+
+- [x] Estrutura em camadas MVC
+- [x] Configuração extraída para `config/`, sem segredos hardcoded
+- [x] Models, repositories e services separados
+- [x] Rotas e controllers sem lógica de negócio ou acesso direto ao banco
+- [x] Error handling central em `middlewares/errorHandler.js`
+- [x] Entry point claro (`src/app.js` como composition root)
+- [x] Testes de rota embarcados em `test/routes.test.js`
+- [x] Endpoints originais preservados; relatório e exclusão agora protegidos por `ADMIN_TOKEN`
+- [x] Format, lint, build, testes e `npm audit` verdes
+
 ## Como Executar
 
 ### Pré-requisitos
@@ -590,4 +618,41 @@ smoke test embarcado:
 
 ```bash
 uv run python -m pytest tests/
+```
+
+### Projeto 2 - Ecommerce API Legacy
+
+A partir da raiz do projeto:
+
+```bash
+cd ecommerce-api-legacy
+claude "/refactor-arch"
+```
+
+O fluxo é o mesmo: análise e auditoria read-only, gate de confirmação e fase 3 autônoma. A skill
+detecta Node.js, Express e SQLite, preserva as três rotas originais e protege as operações
+administrativas no lugar, sem reduzir a superfície da API.
+
+#### Subir o projeto refatorado
+
+```bash
+cd ecommerce-api-legacy
+npm install
+ADMIN_TOKEN=dev-admin-token npm start    # http://localhost:3000
+```
+
+`PORT`, `DATABASE_FILENAME` e `ADMIN_TOKEN` vêm do ambiente. Sem `ADMIN_TOKEN`, a aplicação inicia,
+mas as rotas administrativas respondem `503` até que a credencial seja configurada.
+
+#### Validar
+
+A fase 3 roda Prettier, ESLint, verificação de sintaxe, testes de rota in-process e auditoria de
+dependências. Para repetir a validação:
+
+```bash
+npm run format:check
+npm run lint
+npm run build
+npm test
+npm audit --audit-level=low
 ```
