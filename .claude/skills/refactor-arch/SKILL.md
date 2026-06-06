@@ -38,10 +38,10 @@ and is read **on demand** — load only what the current step needs:
 |---|---|
 | Command shape that won't trigger prompts · in-process verification · safe deletion | [`rules/execution-conventions.md`](./rules/execution-conventions.md) |
 | How to install / run / test / verify a specific stack | [`rules/stacks/<stack>.md`](./rules/stacks/) — `node` · `python` · `go` · `ruby` · `php` · `jvm` · `dotnet` |
-| Anti-pattern catalog (Phase 2 detection) | [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) |
-| Target principles (SOLID · DRY · KISS · YAGNI · MVC · Object Calisthenics) | [`design-patterns-catalog.md`](./design-patterns-catalog.md) |
-| Audit report shape (Phase 2 output) | [`audit-report-template.md`](./audit-report-template.md) |
-| Before/after transformations (Phase 3) | [`refactoring-playbook.md`](./refactoring-playbook.md) |
+| Anti-pattern catalog (Phase 2 detection) | [`anti-patterns-catalog.md`](./references/anti-patterns-catalog.md) |
+| Target principles (SOLID · DRY · KISS · YAGNI · MVC · Object Calisthenics) | [`design-patterns-catalog.md`](./references/design-patterns-catalog.md) |
+| Audit report shape (Phase 2 output) | [`audit-report-template.md`](./references/audit-report-template.md) |
+| Before/after transformations (Phase 3) | [`refactoring-playbook.md`](./references/refactoring-playbook.md) |
 
 **Inviolable principle:** never write/edit/delete a target-project file before the gate. When in
 doubt **before the gate**, stop and ask. **After** the gate, Phase 3 runs autonomously — resolve
@@ -86,7 +86,7 @@ Endpoints:     <count + highlights>
 
 ## Phase 2 — Audit (read-only)
 
-**Goal:** cross-reference the code against [`anti-patterns-catalog.md`](./anti-patterns-catalog.md)
+**Goal:** cross-reference the code against [`anti-patterns-catalog.md`](./references/anti-patterns-catalog.md)
 and emit a structured report. **Modifies nothing — the report is shown in the session only; it is
 not written to disk.**
 
@@ -94,8 +94,8 @@ not written to disk.**
 1. For each catalog entry, search the **detection signals**; record every hit with exact
    `file:line`. Check the catalog's **deprecated APIs** section too.
 2. Classify each finding by **severity** (CRITICAL / HIGH / MEDIUM / LOW). Point each fix at the
-   principle it moves toward ([`design-patterns-catalog.md`](./design-patterns-catalog.md)).
-3. Fill [`audit-report-template.md`](./audit-report-template.md) **exactly**: header, summary by
+   principle it moves toward ([`design-patterns-catalog.md`](./references/design-patterns-catalog.md)).
+3. Fill [`audit-report-template.md`](./references/audit-report-template.md) **exactly**: header, summary by
    severity, findings **ordered CRITICAL → LOW**, deprecated section.
 4. **Print the report in the session only — write no file.**
 5. **Proceed to the gate.**
@@ -155,7 +155,7 @@ place**, never by deleting it. Resolve deterministically — never pause to ask:
 | Security finding | In-place fix (route preserved) |
 |---|---|
 | **SQL injection** — input concatenated into a query | **Parameterized / bound queries**. Same route and contract; input can't alter the SQL. |
-| **Endpoint that runs request-supplied SQL/code**, or a **destructive/admin action**, exposed **without access control** | **Authentication + admin authorization** ([`refactoring-playbook.md`](./refactoring-playbook.md) §13) so only an authenticated admin reaches it; route keeps responding. Optionally constrain/allow-list the operation without changing its contract. |
+| **Endpoint that runs request-supplied SQL/code**, or a **destructive/admin action**, exposed **without access control** | **Authentication + admin authorization** ([`refactoring-playbook.md`](./references/refactoring-playbook.md) §13) so only an authenticated admin reaches it; route keeps responding. Optionally constrain/allow-list the operation without changing its contract. |
 | **Other findings** — plaintext passwords, secret/PII exposure, mass-assignment, … | Fix in place per the playbook (salted hashing, output DTOs, allow-lists). Route unchanged. |
 
 Auth-gated routes still **respond** (valid admin credential → normal result; otherwise `401/403`).
@@ -185,8 +185,8 @@ Install dependencies **once** and reuse across tasks — never per worktree.
 
 The **main session is always the orchestrator** (subagents cannot spawn subagents). Small project →
 in-place, then Verify. Large project → one subagent per task in its own `git worktree` on its own
-branch; each refactors **only its slice** following [`refactoring-playbook.md`](./refactoring-playbook.md)
-and the layer responsibilities in [`design-patterns-catalog.md`](./design-patterns-catalog.md), and
+branch; each refactors **only its slice** following [`refactoring-playbook.md`](./references/refactoring-playbook.md)
+and the layer responsibilities in [`design-patterns-catalog.md`](./references/design-patterns-catalog.md), and
 **preserves the route surface**. Run a wave concurrently; the wave boundary is the dependency
 barrier.
 
@@ -238,10 +238,10 @@ Security:    all endpoints preserved · vulnerabilities fixed in place (paramete
 |---|---|
 | [`rules/execution-conventions.md`](./rules/execution-conventions.md) | Permission-friendly command shape · in-process verification · deletion guardrail |
 | [`rules/stacks/`](./rules/stacks/) | Per-stack ops (install/run/stop/test/lint/verify): `node` · `python` · `go` · `ruby` · `php` · `jvm` · `dotnet` |
-| [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) | Anti-pattern catalog (signals, severity, impact, fix) + deprecated |
-| [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics |
-| [`audit-report-template.md`](./audit-report-template.md) | Standardized audit report skeleton (Phase 2) |
-| [`refactoring-playbook.md`](./refactoring-playbook.md) | Before/after transformations + MVC target layout (Phase 3) |
+| [`anti-patterns-catalog.md`](./references/anti-patterns-catalog.md) | Anti-pattern catalog (signals, severity, impact, fix) + deprecated |
+| [`design-patterns-catalog.md`](./references/design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics |
+| [`audit-report-template.md`](./references/audit-report-template.md) | Standardized audit report skeleton (Phase 2) |
+| [`refactoring-playbook.md`](./references/refactoring-playbook.md) | Before/after transformations + MVC target layout (Phase 3) |
 | [`scripts/safe_remove.py`](./scripts/safe_remove.py) | Guardrailed remover for Phase 3 cleanup inside the target project root only |
 
 > **Self-contained and copyable:** the skill references no paths outside this folder, so it can be
