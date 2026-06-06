@@ -5,13 +5,13 @@ description: Analyzes, audits, and refactors legacy backends to the MVC pattern 
 
 # refactor-arch
 
-Skill that drives the assessment and architectural evolution of a legacy backend as a
-**3-phase workflow with human-in-the-loop (HITL)**. Phases 1 and 2 are **read-only** — no
-file is modified. Phase 3 (refactoring) only starts after **explicit human confirmation**
-of the audit report.
+Assess and evolve a legacy backend as a **3-phase workflow with one human-in-the-loop (HITL)
+checkpoint**. Phases 1–2 are **read-only**; Phase 3 refactors and runs **autonomously** after the
+gate. Language- and framework-agnostic: **detect the stack, then consult the matching rule file** —
+this document is the map, not the manual.
 
-> ⚠️ **Safety:** Phases 1–2 never modify files. Phase 3 only runs after an explicit `y` at
-> the [confirmation gate](#-confirmation-gate-hitl) — never before.
+> ⚠️ **Safety:** Phases 1–2 never modify files. Phase 3 only runs after an explicit `y` at the
+> [confirmation gate](#-confirmation-gate-hitl) — never before.
 
 ## Workflow overview
 
@@ -20,7 +20,7 @@ flowchart TD
     F1["Phase 1 — Analysis<br/>detect stack and map architecture"]
     F2["Phase 2 — Audit<br/>findings report CRITICAL→LOW"]
     GATE{"🛑 HITL gate<br/>human confirmation required"}
-    F3["Phase 3 — Refactoring<br/>orchestrated · parallel subagents · loop until green"]
+    F3["Phase 3 — Refactoring<br/>autonomous · agent-in-the-loop · until green"]
 
     F1 -->|read-only| F2
     F2 -->|read-only| GATE
@@ -28,61 +28,42 @@ flowchart TD
     GATE -.->|no / request changes| F2
 ```
 
-- **Phases 1–2:** read-only — no file is modified.
-- **Gate:** passes only with explicit human approval.
-- **Phase 3:** modifies files; happens only after the gate.
+## How to use this skill (reference map)
 
-**Inviolable principle:** no writing/editing/deleting any target-project file before the
-confirmation gate. When in doubt, stop and ask.
+This file orchestrates the phases. Detailed, reusable, and stack-specific knowledge lives beside it
+and is read **on demand** — load only what the current step needs:
 
-## Tooling conventions for Codex
+| When you need… | Read |
+|---|---|
+| Command shape that won't trigger prompts · in-process verification · safe deletion | [`rules/execution-conventions.md`](./rules/execution-conventions.md) |
+| How to install / run / test / verify a specific stack | [`rules/stacks/<stack>.md`](./rules/stacks/) — `node` · `python` · `go` · `ruby` · `php` · `jvm` · `dotnet` |
+| Anti-pattern catalog (Phase 2 detection) | [`anti-patterns-catalog.md`](./references/anti-patterns-catalog.md) |
+| Target principles (SOLID · DRY · KISS · YAGNI · MVC · Object Calisthenics) | [`design-patterns-catalog.md`](./references/design-patterns-catalog.md) |
+| Audit report shape (Phase 2 output) | [`audit-report-template.md`](./references/audit-report-template.md) |
+| Before/after transformations (Phase 3) | [`refactoring-playbook.md`](./references/refactoring-playbook.md) |
 
-- Follow repository `AGENTS.md` instructions, including the `rtk` shell prefix when available.
-- Prefer Codex file/search tools for inspection. Use shell commands only when they add value
-  for discovery, validation, dependency management, or git operations.
-- Run simple, focused shell commands. Avoid combining unrelated actions in one command so
-  sandbox approvals and failures remain easy to reason about.
-- Never read `.env` files. Treat secrets and local database files as private runtime artifacts.
-- Invoke tools by program name, not by local binary path: `uv run <tool>` or `python -m <tool>`
-  for Python, `npx <tool>` for Node.
-- Respect Codex sandbox/approval prompts. Request escalation for dependency downloads,
-  writes outside the workspace, GUI/browser opens, and potentially destructive operations.
-
-## Deletion guardrail
-
-- Raw deletion commands are not allowed: do not use `rm`, `rmdir`, or `git rm`.
-- During Phase 3, remove obsolete files/directories only with the bundled guardrailed remover:
-  `python3 .codex/skills/refactor-arch/scripts/safe_remove.py <path>`.
-- Run it from the target project root. The project root boundary defaults to the current working
-  directory, and every target must resolve inside that boundary.
-- First run without `--confirm` to inspect the dry-run. Re-run with `--confirm` only after the
-  listed targets are clearly part of the refactor plan.
-- The remover refuses the project root, `.git`, `.claude`, `.codex`, `.env`, dependency folders,
-  virtualenvs, and any path that resolves outside the project, including symlinks.
+**Inviolable principle:** never write/edit/delete a target-project file before the gate. When in
+doubt **before the gate**, stop and ask. **After** the gate, Phase 3 runs autonomously — resolve
+conflicts via its documented policies, never by opening a new prompt.
 
 ---
 
-## Phase 1 — Analysis
+## Phase 1 — Analysis (read-only)
 
-**Goal:** detect language, framework, database, and map the current architecture.
-**Output:** a printed summary. **Modifies nothing.**
-
-### Detection heuristics (agnostic)
+**Goal:** detect language, framework, database; map the current architecture and the **route
+surface** (method + path) to preserve. **Modifies nothing.**
 
 | Target | Signals |
 |---|---|
-| **Language** | `requirements.txt`/`*.py` → Python · `package.json`/`*.js`/`*.ts` → Node · `go.mod` → Go · `Gemfile` → Ruby · `composer.json` → PHP |
-| **Framework** | `Flask(__name__)`/`flask==` → Flask · `fastapi`/`APIRouter` → FastAPI · `manage.py`/`settings.py` → Django · `require('express')` → Express |
-| **Database** | `sqlite3.connect`/`new sqlite3.Database` → raw SQLite · `flask_sqlalchemy`/`db.Model` → SQLAlchemy · `psycopg2`/`mysql.connector`/`mongoose` → Postgres/MySQL/Mongo · `CREATE TABLE`/`SELECT … FROM` strings → manual SQL |
-| **Architecture** | everything in 1 file or 1 "do-it-all" class → monolith/God Class · files split by role but importing each other directly, no service/config → nominal separation · `models/ routes/ services/ utils/` folders + blueprints/DI → partial layering |
-| **Entry point / routes** | bootstrap block (`app.run`, `app.listen`, `if __name__ == "__main__"`); counting method+path gives the **route surface** to preserve |
+| **Language** | `requirements.txt`/`*.py` → Python · `package.json`/`*.ts` → Node · `go.mod` → Go · `Gemfile` → Ruby · `composer.json` → PHP · `pom.xml`/`build.gradle` → JVM · `*.csproj` → .NET |
+| **Framework** | `Flask`/`fastapi`/`manage.py` (Python) · `express`/`fastify`/`@nestjs` (Node) · `gin`/`echo` (Go) · `rails`/`sinatra` (Ruby) · `laravel`/`symfony` (PHP) · `spring-boot` (JVM) · `Microsoft.AspNetCore` (.NET) |
+| **Database** | raw driver (`sqlite3`, `pg`, `mysql2`, `psycopg2`) vs ORM (`SQLAlchemy`, `Prisma`, `TypeORM`, `ActiveRecord`, `Eloquent`, `Hibernate`, `EF Core`); inline `CREATE TABLE`/`SELECT … FROM` → manual SQL |
+| **Architecture** | one file / one "do-it-all" class → monolith/God Class · files split by role but importing each other directly → nominal separation · layered folders + DI → partial layering |
+| **Entry point / routes** | bootstrap block (`app.run`, `app.listen`, `main()`); counting method+path gives the **route surface** to preserve |
 
-### Steps
-
-1. List source files and dependencies (without running the project).
-2. Apply the heuristics above to identify stack and architecture.
-3. Map tables/entities and the route surface (method + path).
-4. Print the summary in the format:
+**Steps:** list source files and deps (native `Read`/`Glob`/`Grep`, never run the project) →
+identify stack & architecture → map tables/entities and the route surface → **note which
+[`rules/stacks/<stack>.md`](./rules/stacks/) applies** (Phase 3 will use it). Then print:
 
 ```
 ================================
@@ -102,33 +83,24 @@ Endpoints:     <count + highlights>
 
 ---
 
-## Phase 2 — Audit
+## Phase 2 — Audit (read-only)
 
-**Goal:** cross-reference the code against the anti-pattern catalog and emit a structured
-report. **Modifies nothing — the report is shown in the session only; it is not written to disk.**
+**Goal:** cross-reference the code against [`anti-patterns-catalog.md`](./references/anti-patterns-catalog.md)
+and emit a structured report. **Modifies nothing — the report is shown in the session only; it is
+not written to disk.**
 
-### Steps
-
-1. For each entry in [`anti-patterns-catalog.md`](./anti-patterns-catalog.md), search for the
-   **detection signals** in the code. Record every occurrence with an exact `file:line`.
-2. Classify each finding by the catalog **severity** (CRITICAL / HIGH / MEDIUM / LOW) and
-   check for **deprecated APIs** (the catalog's own section).
-3. Fill the report following the [`audit-report-template.md`](./audit-report-template.md)
-   **exactly**: header, summary with counts by severity, findings **ordered CRITICAL → LOW**,
-   and the Deprecated APIs section.
-4. **Print the report in the session only — do not write any file.** The audit is read-only;
-   it leaves no artifact in the project.
+**Steps:**
+1. For each catalog entry, search the **detection signals**; record every hit with exact
+   `file:line`. Check the catalog's **deprecated APIs** section too.
+2. Classify each finding by **severity** (CRITICAL / HIGH / MEDIUM / LOW). Point each fix at the
+   principle it moves toward ([`design-patterns-catalog.md`](./references/design-patterns-catalog.md)).
+3. Fill [`audit-report-template.md`](./references/audit-report-template.md) **exactly**: header, summary by
+   severity, findings **ordered CRITICAL → LOW**, deprecated section.
+4. **Print the report in the session only — write no file.**
 5. **Proceed to the gate.**
 
-> The principles catalog [`design-patterns-catalog.md`](./design-patterns-catalog.md)
-> (SOLID, DRY, KISS, YAGNI, MVC, Object Calisthenics) is the target ruler: each finding
-> should point to which principle the fix moves the code toward.
-
-### Minimum report criteria
-
-- ≥ 5 findings, including ≥ 1 CRITICAL or HIGH.
-- Each finding with `file:line` and the template fields (Description, Impact, Recommendation).
-- Findings ordered by severity; deprecated in its own section.
+**Minimum criteria:** ≥ 5 findings incl. ≥ 1 CRITICAL/HIGH; each with `file:line` + Description,
+Impact, Recommendation; ordered by severity.
 
 ---
 
@@ -138,34 +110,35 @@ When Phase 2 ends, the skill **STOPS**. Before any modification:
 
 1. State explicitly that **no target-project file has been changed** so far.
 2. Present the report summary (counts by severity + total).
-3. Confirm the audit was read-only and left **no file** in the project, then print the
-   confirmation line **exactly** as below, and **wait for the answer**:
+3. Confirm the audit was read-only and left **no file** in the project, then print the confirmation
+   line **exactly** as below, and **wait for the answer**:
 
 ```
 Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]
 ```
 
-4. **Do not proceed** without an explicit `y` (or "yes"/equivalent) from the user. `n`,
-   requests for clarification, finding adjustments, or a new audit **do not** count as approval.
+4. **Do not proceed** without an explicit `y` (or "yes"/equivalent). `n`, clarification requests,
+   finding adjustments, or a new audit **do not** count as approval.
 
 ---
 
-## Phase 3 — Refactoring (orchestrated, agent-in-the-loop)
+## Phase 3 — Refactoring (autonomous, agent-in-the-loop)
 
-**Precondition:** explicit `y` at the gate. Never start otherwise.
+**Precondition:** explicit `y` at the gate. **Goal:** restructure to MVC, removing the audited
+anti-patterns while **preserving the route surface**. Before running commands, read
+[`rules/execution-conventions.md`](./rules/execution-conventions.md); for every toolchain command
+use the detected [`rules/stacks/<stack>.md`](./rules/stacks/).
 
-**Goal:** restructure the project to MVC, removing the audited anti-patterns, **without
-changing behavior** — every original endpoint must still respond. The refactor is split into
-tasks, executed by **parallel subagents in isolated git worktrees**, verified against the
-project's own toolchain, and **looped until the project is 100% functional**.
+> **Phase 3 is autonomous — it never opens a new HITL prompt.** Approving the audit at the gate
+> authorizes applying **every** remediation it lists. Resolve conflicts via the policies below.
 
 ```mermaid
 flowchart TD
-    D["3.1 Discover toolchain<br/>install · lint · format · build · test · run"]
-    P["3.2 Plan & decompose<br/>independent tasks grouped in waves"]
+    D["3.1 Discover toolchain<br/>per the stack rule file"]
+    P["3.2 Plan & decompose + scale"]
     O["3.3 Orchestrate<br/>in-place (small) · parallel worktrees (large)"]
-    I["3.4 Integrate<br/>merge worktrees, resolve conflicts"]
-    V["3.5 Verify<br/>format · lint · build · test · boot · endpoints"]
+    I["3.4 Integrate"]
+    V["3.5 Verify in-process<br/>format · lint · build · test · routes"]
     DONE(["100% functional"])
 
     D --> P --> O --> I --> V
@@ -173,102 +146,74 @@ flowchart TD
     V -.->|any failure| P
 ```
 
-### 3.1 Discover the project's toolchain (stack-driven)
+### 3.0 Security precedence (secure endpoints in place — never drop a route)
 
-Detect the exact commands for **this** stack by inspecting its manifests/config — never assume:
-`package.json` scripts, `pyproject.toml`/`setup.cfg`/`tox.ini`, `Makefile`, `README`, CI files
-(`.github/workflows/*`), `.pre-commit-config.yaml`, lockfiles. **Read these manifests with
-`Read`/`Glob`/`Grep`, and probe tool availability with single atomic commands** (e.g.
-`python3 -m pytest --version`) — never chained shell lines (see *Tooling conventions*). Record the
-command for each of: **install deps · format · lint · build/compile · test · run/boot**. If a
-category is missing, fall back to the language's standard tool, or define a smoke test = boot the
-app + hit every endpoint.
+**Preserve every original endpoint.** A security finding is fixed by making the route **secure in
+place**, never by deleting it. Resolve deterministically — never pause to ask:
 
-Prefer a launcher that keeps environment + invocation self-contained (and the program name
-stable for permission matching):
-- **Python:** default to **`uv`** — `uv venv`, `uv pip install -r requirements.txt`,
-  `uv run <tool>` (it reads `requirements.txt` and PEP 621 `pyproject.toml` regardless of whether
-  the project used pip or poetry). If `uv` is unavailable, fall back to `python -m venv` +
-  `python -m pip` + `python -m <tool>`. Never invoke tools via `.venv/bin/<tool>` directly.
-- **Node:** use the project's package manager (`npm`/`pnpm`/`yarn`) and run binaries via `npx`.
-- **Other stacks:** use the ecosystem's own runner (`go`, `make`, …).
+| Security finding | In-place fix (route preserved) |
+|---|---|
+| **SQL injection** — input concatenated into a query | **Parameterized / bound queries**. Same route and contract; input can't alter the SQL. |
+| **Endpoint that runs request-supplied SQL/code**, or a **destructive/admin action**, exposed **without access control** | **Authentication + admin authorization** ([`refactoring-playbook.md`](./references/refactoring-playbook.md) §13) so only an authenticated admin reaches it; route keeps responding. Optionally constrain/allow-list the operation without changing its contract. |
+| **Other findings** — plaintext passwords, secret/PII exposure, mass-assignment, … | Fix in place per the playbook (salted hashing, output DTOs, allow-lists). Route unchanged. |
 
-### 3.2 Plan & decompose into tasks
+Auth-gated routes still **respond** (valid admin credential → normal result; otherwise `401/403`).
+**The route surface is never reduced.** Note hardened routes in the completion report.
 
-From the audit findings and the target MVC layout, build a **task list** sized so tasks are as
-**independent as possible** and can run in parallel:
+### 3.1 Discover the toolchain
 
-- Prefer **one task per layer/slice** (config, models, repositories, services, controllers,
-  routes, middlewares) and/or **per domain/entity**.
-- Record **dependencies** (e.g. controllers depend on services) and group tasks into **waves**:
-  everything in a wave runs in parallel; dependent tasks go to later waves.
-- Track tasks explicitly, each with a clear, verifiable done-criterion.
+From the detected [`rules/stacks/<stack>.md`](./rules/stacks/), record the project's commands for
+**install · run/stop · test · lint · format · build · in-process verify**. Prefer the project's own
+manifest scripts (`package.json`, `Makefile`, etc.) when present; read them with native tools.
 
-### 3.2.1 Scale the execution (decide parallelism)
+### 3.2 Plan, decompose & scale
 
-**Match the orchestration cost to the project size — parallel worktrees are not free.** Setting
-up a worktree per task plus integration/merge has real overhead that only pays off at scale.
-Decide before fanning out:
+Build a **task list** sized so tasks are as independent as possible — prefer one task per
+layer/slice (config, models, repositories, services, controllers, routes, middlewares) and/or per
+domain. Record dependencies and group into **waves** (a wave runs in parallel; dependents go later).
+Then match orchestration cost to size:
 
 | Project shape | Strategy |
 |---|---|
-| **Small / single-domain** (≈ a few hundred LOC, one cohesive module/monolith) | Refactor in a **single in-place pass** — the orchestrator (or one subagent) does it sequentially. **Skip worktrees.** |
-| **Large / multi-domain** (many independent entities, or thousands of LOC) | **Fan out**: one subagent per slice/domain in isolated worktrees (3.3), grouped in waves. |
+| **Small / single-domain** (≈ a few hundred LOC, one cohesive module) | **Single in-place pass** — orchestrator or one subagent, sequential. **Skip worktrees.** |
+| **Large / multi-domain** (many entities, or thousands of LOC) | **Fan out** — one subagent per slice in isolated worktrees, grouped in waves. |
 
-Regardless of strategy, **install dependencies once and reuse** across tasks — never re-install
-per worktree.
+Install dependencies **once** and reuse across tasks — never per worktree.
 
-### 3.3 Orchestrate the refactor (parallel subagents for large projects)
+### 3.3 Orchestrate
 
-The **main session is always the orchestrator** (subagents cannot spawn their own subagents).
-For a **small** project, do the in-place pass and go straight to Verify (3.5). For a **large**
-project, dispatch **one subagent per task in its own git worktree** so concurrent edits never
-collide:
+The **main session is always the orchestrator** (subagents cannot spawn subagents). Small project →
+in-place, then Verify. Large project → one subagent per task in its own `git worktree` on its own
+branch; each refactors **only its slice** following [`refactoring-playbook.md`](./references/refactoring-playbook.md)
+and the layer responsibilities in [`design-patterns-catalog.md`](./references/design-patterns-catalog.md), and
+**preserves the route surface**. Run a wave concurrently; the wave boundary is the dependency
+barrier.
 
-- Create an isolated worktree per task (`git worktree add`), on its own branch.
-- The subagent refactors **only its slice**, following [`refactoring-playbook.md`](./refactoring-playbook.md)
-  and the layer responsibilities in [`design-patterns-catalog.md`](./design-patterns-catalog.md);
-  it must **preserve the route surface** from Phase 1.
-- Run the wave's subagents **concurrently**; wait for the whole wave to finish before the next
-  (the wave boundary is the dependency barrier).
-
-### 3.3.1 Cross-cutting best practices (apply during refactor)
-
-Beyond removing the audited anti-patterns, every refactor should leave these in place — stated
-**agnostically**; implement them with the project's own stack and only where they don't break
-the Phase 1 route surface:
-
-- **Authentication & authorization** — issue a signed, time-bound credential on login and gate
-  sensitive / state-changing / admin routes behind an authorization middleware (roles assigned
-  server-side, never from the request body). Keep public read endpoints public. See
-  [`refactoring-playbook.md`](./refactoring-playbook.md) §13.
-- **Pagination** — list endpoints return bounded payloads via a default page size and a hard
-  maximum (offset or cursor/keyset). Apply the same defaults across all list endpoints for a
-  consistent contract. See [`refactoring-playbook.md`](./refactoring-playbook.md) §14.
+**Cross-cutting best practices** (apply where they don't break the route surface): **auth &
+authorization** on sensitive/admin routes (playbook §13) and **pagination** on list endpoints
+(playbook §14).
 
 ### 3.4 Integrate
 
-The orchestrator (not the subagents) merges each worktree back into the working branch,
-resolves conflicts, and removes the worktree. Keep changes incremental and reviewable.
+The orchestrator (not the subagents) merges each worktree back, resolves conflicts, and removes the
+worktree (see deletion guardrail in [`rules/execution-conventions.md`](./rules/execution-conventions.md)).
+Keep changes incremental and reviewable.
 
-### 3.5 Verify against the toolchain
+### 3.5 Verify against the toolchain (in-process)
 
-After integrating a wave (and at the end), run the commands discovered in 3.1, in order:
-
-1. install deps → 2. **format** → 3. **lint** → 4. **build/compile** → 5. **test**.
-6. **Boot** the app and confirm **every original endpoint responds** (route surface from Phase 1).
-
-Capture every failure with its output.
+After integrating a wave (and at the end), run the stack's commands in order: install →
+**format** → **lint** → **build/compile** → **test** → **in-process route check** (drive the app
+with the framework's test client per the stack file — no real server, no `curl`; auth-gated routes
+checked with a valid admin credential). Capture every failure with its output.
 
 ### 3.6 Loop until 100% functional
 
-If anything fails (format/lint/build/test/boot/endpoint) or any audited anti-pattern remains,
-create **fix tasks**, re-dispatch subagents (3.3), integrate, and **re-verify**. Repeat —
-agent-in-the-loop — **for as many iterations as needed**. Declare completion only when **all**
-hold at once:
+On any failure (format/lint/build/test/route) or remaining anti-pattern, create **fix tasks**,
+re-dispatch (3.3), integrate, and re-verify — **for as many iterations as needed**. Declare
+completion only when **all** hold:
 
 - formatter clean · linter clean · build passes · tests pass
-- app boots · every original endpoint responds
+- app boots · every original endpoint responds (auth-gated with a valid admin credential)
 - no audited anti-pattern remains in the touched code
 
 Then print:
@@ -280,6 +225,7 @@ PHASE 3: REFACTORING COMPLETE
 Structure:   <new MVC layout>
 Toolchain:   format ✓ | lint ✓ | build ✓ | test ✓
 Validation:  app boots ✓ | endpoints respond ✓ | anti-patterns resolved ✓
+Security:    all endpoints preserved · vulnerabilities fixed in place (parameterized · auth-gated · hashed)
 ================================
 ```
 
@@ -287,14 +233,16 @@ Validation:  app boots ✓ | endpoints respond ✓ | anti-patterns resolved ✓
 
 ## Reference files
 
-| File | Content | Status |
-|---|---|---|
-| [`anti-patterns-catalog.md`](./anti-patterns-catalog.md) | Anti-pattern catalog (signals, severity, impact, fix) + deprecated | ✅ |
-| [`design-patterns-catalog.md`](./design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics | ✅ |
-| [`audit-report-template.md`](./audit-report-template.md) | Standardized audit report skeleton (Phase 2) | ✅ |
-| [`refactoring-playbook.md`](./refactoring-playbook.md) | Before/after transformations mapped to the catalog + MVC target layout (Phase 3) | ✅ |
-| [`scripts/safe_remove.py`](./scripts/safe_remove.py) | Guardrailed remover for Phase 3 cleanup inside the target project root only | ✅ |
-| *(pending)* detailed analysis heuristics | Dedicated Phase 1 reference (currently summarized inline above) | ⏳ |
+| File | Content |
+|---|---|
+| [`rules/execution-conventions.md`](./rules/execution-conventions.md) | Permission-friendly command shape · in-process verification · deletion guardrail |
+| [`rules/stacks/`](./rules/stacks/) | Per-stack ops (install/run/stop/test/lint/verify): `node` · `python` · `go` · `ruby` · `php` · `jvm` · `dotnet` |
+| [`anti-patterns-catalog.md`](./references/anti-patterns-catalog.md) | Anti-pattern catalog (signals, severity, impact, fix) + deprecated |
+| [`design-patterns-catalog.md`](./references/design-patterns-catalog.md) | Target principles: SOLID, DRY, KISS, YAGNI, MVC (layers), Object Calisthenics |
+| [`audit-report-template.md`](./references/audit-report-template.md) | Standardized audit report skeleton (Phase 2) |
+| [`refactoring-playbook.md`](./references/refactoring-playbook.md) | Before/after transformations + MVC target layout (Phase 3) |
+| [`scripts/safe_remove.py`](./scripts/safe_remove.py) | Guardrailed remover for Phase 3 cleanup inside the target project root only |
 
-> **Self-contained and copyable:** the skill references no paths outside this folder, so it
-> can be copied into other projects without changes. Do not assume a specific stack.
+> **Self-contained and copyable:** the skill references no paths outside this folder, so it can be
+> copied into other projects without changes. Do not assume a specific stack — detect, then read the
+> matching rule file.
