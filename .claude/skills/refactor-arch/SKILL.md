@@ -59,6 +59,13 @@ never by opening a new prompt.
   name (`pip`, `eslint`). Run tools through their launcher so the program name stays stable:
   `uv run <tool>` / `python -m <tool>` (Python), `npx <tool>` (Node). This both satisfies the
   allow-list and avoids depending on a specific venv path.
+- **Don't prefix a command with inline environment assignments.** `DB_PATH=… SECRET_KEY=… uv run …`
+  makes the line start with `DB_PATH=` instead of the program, so it doesn't match `Bash(uv:*)` and
+  prompts. Set those values **inside** the script you run (e.g. `os.environ.setdefault(...)`) or via
+  the tool's own config file, so the command starts with the program name.
+- **Don't probe over the network to verify.** Booting a real server and hitting it with `curl`
+  pulls in a network tool (often re-wrapped by a shell hook, e.g. `rtk curl`) plus `sleep`/`;` —
+  all of which prompt. Verify **in-process** instead (see Phase 3.5).
 
 ## Deletion guardrail
 
@@ -291,9 +298,17 @@ resolves conflicts, and removes the worktree. Keep changes incremental and revie
 After integrating a wave (and at the end), run the commands discovered in 3.1, in order:
 
 1. install deps → 2. **format** → 3. **lint** → 4. **build/compile** → 5. **test**.
-6. **Boot** the app and confirm **every original endpoint responds** (full route surface from
-   Phase 1; for routes newly placed behind auth per [3.0](#30-security-precedence-secure-endpoints-in-place),
-   verify with a valid admin credential).
+6. **Verify the route surface in-process — prefer the framework's test client over a real HTTP
+   server.** Write a small verification script that imports the app and exercises **every** Phase 1
+   route through the in-process test client (Flask `app.test_client()`, Express `supertest`,
+   FastAPI `TestClient`, …), asserting each still responds — auth-gated routes per
+   [3.0](#30-security-precedence-secure-endpoints-in-place) checked with a valid admin credential.
+   Run it as a **single** command (`uv run python verify_routes.py` / `node verify_routes.js`) with
+   any config set **inside** the script (`os.environ.setdefault(...)`). This needs no server boot,
+   no `sleep`, no `curl`/network, and no env-var prefix — so it runs without permission prompts.
+   Only if the framework genuinely has no in-process client, fall back to booting a real server
+   (env set inside a launcher script, not on the command line) and probing it — note that HTTP
+   probing requires a network tool (`curl`) the user must grant explicitly.
 
 Capture every failure with its output.
 
