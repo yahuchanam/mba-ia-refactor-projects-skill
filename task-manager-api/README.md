@@ -11,3 +11,7 @@ python app.py
 ```
 
 A aplicação sobe em `http://localhost:5000`. O `seed.py` popula o banco SQLite (`tasks.db`) com usuários, categorias e tasks de exemplo — **rode-o antes do primeiro boot**, caso contrário os endpoints vão retornar listas vazias.
+
+As operações de escrita exigem `Authorization: Bearer <token>` de um usuário administrador.
+Configure `SECRET_KEY` e `SEED_ADMIN_PASSWORD` conforme `.env.example`.
+Obtenha o token em `POST /login`; o seed cria o administrador `joao@email.com`.
