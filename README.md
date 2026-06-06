@@ -576,6 +576,35 @@ Foram encontrados 18 findings: 4 CRITICAL, 5 HIGH, 5 MEDIUM, 3 LOW e 1 API depre
 - [x] Endpoints originais preservados; relatório e exclusão agora protegidos por `ADMIN_TOKEN`
 - [x] Format, lint, build, testes e `npm audit` verdes
 
+### Projeto 3 — task-manager-api (Python/Flask, SQLAlchemy)
+
+Refatorado e commitado (`b082b95`).
+
+| Antes | Depois |
+|---|---|
+| 15 arquivos, ~1.158 LOC, separação nominal em `models/ routes/ services/ utils/`, com regras e acesso ao banco concentrados nas rotas | MVC em camadas: `config/ models/ repositories/ services/ controllers/ routes/ middlewares/` + `tests/` |
+| segredo e credencial SMTP hardcoded, senha com MD5, hash exposto na API, token previsível e mutações sem autorização | config via env, hash salgado do Werkzeug, DTOs sem senha, token assinado e operações de escrita protegidas por autenticação admin |
+| N+1, validação duplicada, APIs deprecated, listas sem paginação e camadas mortas | eager loading e agregações SQL, schemas Marshmallow, APIs atuais do SQLAlchemy, paginação e dependências injetadas |
+
+#### Auditoria da fase 2
+
+O relatório é exibido na sessão (read-only; por decisão de design não é persistido em disco).
+Foram encontrados 16 findings: 3 CRITICAL, 4 HIGH, 5 MEDIUM, 2 LOW e 2 APIs deprecated, alinhados à
+[análise manual](refinement/phase1-project-3.md).
+
+#### Validação da fase 3
+
+- [x] Estrutura em camadas MVC
+- [x] Configuração extraída para `config.py` e `.env.example`, sem segredos hardcoded
+- [x] Models, repositories e services separados
+- [x] Rotas e controllers sem lógica de negócio ou acesso direto ao banco
+- [x] Validação centralizada com schemas Marshmallow
+- [x] Error handling central em `errors.py`
+- [x] Entry point claro (`app.py` como composition root)
+- [x] Testes de rota embarcados em `tests/test_api.py`
+- [x] 22 endpoints originais preservados; operações de escrita agora exigem token de administrador
+- [x] Format, lint, compile, testes e verificação in-process verdes
+
 ## Como Executar
 
 ### Pré-requisitos
@@ -655,4 +684,46 @@ npm run lint
 npm run build
 npm test
 npm audit --audit-level=low
+```
+
+### Projeto 3 - Task Manager API
+
+A partir da raiz do projeto:
+
+```bash
+cd task-manager-api
+claude "/refactor-arch"
+```
+
+O fluxo é o mesmo: análise e auditoria read-only, gate de confirmação e fase 3 autônoma. A skill
+detecta Python, Flask e SQLAlchemy, preserva os 22 endpoints originais e reorganiza a separação
+parcial existente em camadas com responsabilidades e dependências explícitas.
+
+#### Subir o projeto refatorado
+
+```bash
+cd task-manager-api
+cp .env.example .env         # defina SECRET_KEY e SEED_ADMIN_PASSWORD
+uv venv
+uv pip install -r requirements.txt
+uv run python seed.py
+uv run python app.py         # http://localhost:5000
+```
+
+As operações de escrita exigem `Authorization: Bearer <token>` de administrador. O seed cria
+`joao@email.com`; use `SEED_ADMIN_PASSWORD` para autenticar em `POST /login` e obter o token
+assinado.
+
+#### Validar
+
+A fase 3 roda Ruff, compilação, testes e verificação das rotas com o test client do Flask. Para
+repetir a validação:
+
+```bash
+uv pip install -r requirements-dev.txt
+uv run ruff format --check .
+uv run ruff check .
+uv run python -m compileall -q .
+uv run pytest -q
+uv run python verify_routes.py
 ```
