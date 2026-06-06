@@ -462,3 +462,268 @@ arquitetura atual e catálogo de anti-patterns com severidade e `arquivo:linha`.
 | Projeto 1 — `code-smells-project` (Python/Flask) | [phase1-project-1.md](refinement/phase1-project-1.md) |
 | Projeto 2 — `ecommerce-api-legacy` (Node.js/Express) | [phase1-project-2.md](refinement/phase1-project-2.md) |
 | Projeto 3 — `task-manager-api` (Python/Flask) | [phase1-project-3.md](refinement/phase1-project-3.md) |
+
+## Construção da Skill
+
+A skill começou como um único `SKILL.md` e evoluiu, por iterações, para um mapa que delega o
+conhecimento a arquivos lidos sob demanda (progressive disclosure):
+
+```
+.claude/skills/refactor-arch/
+├── SKILL.md                       # mapa: fluxo das 3 fases + gate HITL + índice de referência
+├── rules/
+│   ├── execution-conventions.md   # como rodar comandos sem fricção de permissão
+│   └── stacks/{node,python,go,ruby,php,jvm,dotnet}.md
+├── references/
+│   ├── anti-patterns-catalog.md   # sinais de detecção + severidade (Fase 2)
+│   ├── design-patterns-catalog.md # SOLID · DRY · KISS · YAGNI · MVC · Object Calisthenics
+│   ├── audit-report-template.md   # formato do relatório
+│   └── refactoring-playbook.md    # 14 transformações antes/depois
+└── scripts/safe_remove.py         # remoção guardrailed (Fase 3)
+```
+
+### Estrutura
+
+O `SKILL.md` orquestra três fases sequenciais com um único ponto de confirmação humana. As fases 1
+e 2 são read-only; a fase 3 só inicia após `y` explícito no gate, que permanece no mapa para nunca
+ser pulado.
+
+### Catálogo e playbook
+
+O catálogo reúne mais de 20 anti-patterns, descritos por sinal de detecção e correção, sem citar
+projeto ou linguagem. Cobre todas as severidades — de SQL Injection, segredos hardcoded e God Class
+(CRITICAL) a N+1 e validação fraca (MEDIUM) e magic numbers (LOW) — e inclui detecção de APIs
+deprecated. As correções ficam no playbook, em pseudocódigo neutro, com 14 transformações
+antes/depois.
+
+### Agnosticismo de tecnologia
+
+A fase 1 detecta a stack e a fase 3 lê apenas o `rules/stacks/<stack>.md` correspondente (Node,
+Python, Go, Ruby, PHP, JVM, .NET). Cada arquivo descreve como instalar dependências, subir e parar
+o ambiente, rodar testes e lint/format/build, e verificar as rotas in-process. O mapa não contém
+caminho ou comando fixo de stack.
+
+### Desafios e soluções
+
+Orquestração da fase 3 — a refatoração é decomposta em tarefas paralelizáveis, com escala automática
+(passe in-place para monolito pequeno; subagentes em git worktrees para projeto grande) e iteração
+até a verificação passar.
+
+Segurança sem remover rotas — uma versão removia endpoints perigosos, como `/admin/query`, e parava
+para perguntar no meio da fase 3. A regra foi invertida para corrigir no lugar: SQL Injection vira
+query parametrizada, e rota administrativa exposta sem proteção ganha autenticação e autorização. A
+superfície de rotas nunca diminui e a fase roda sem nova interrupção.
+
+Fricção de permissão — comandos compostos, prefixos de variável de ambiente, opções antes do
+subcomando (`git -C`) e binários por caminho (`.venv/bin/pip`) disparam pedidos de aprovação. As
+regras de execução foram reunidas em `execution-conventions.md`, pré-autorizadas via `allowed-tools`
+e `settings.json`, e a verificação passou a usar test client in-process, sem servidor real nem `curl`.
+
+## Resultados
+
+### Projeto 1 — code-smells-project (Python/Flask, SQLite cru)
+
+Refatorado e commitado (`0890d14`).
+
+| Antes | Depois |
+|---|---|
+| 4 arquivos (`app.py`, `controllers.py`, `models.py`, `database.py`), ~780 LOC, monolito | MVC em camadas: `config/ models/ repositories/ services/ controllers/ routes/ middlewares/ utils/` + `tests/` |
+| SQL por concatenação, segredo hardcoded, senha em plaintext, `/admin/*` sem auth | queries parametrizadas, config via env, hash salgado, `/admin/*` atrás de autenticação/admin (`middlewares/auth.py`) |
+| sem service layer, conexão global mutável, sem paginação | services por domínio, conexão por request, `utils/pagination.py` |
+
+#### Auditoria da fase 2
+
+O relatório é exibido na sessão (read-only; por decisão de design não é persistido em disco). Traz
+ao menos 5 findings, com no mínimo 1 CRITICAL, ordenados de CRITICAL a LOW, alinhados à
+[análise manual](refinement/phase1-project-1.md) (7 CRITICAL/HIGH, 3 MEDIUM, demais LOW).
+
+#### Validação da fase 3
+
+- [x] Estrutura em camadas MVC
+- [x] Configuração extraída para `config/`, sem valores hardcoded
+- [x] Models e serializers
+- [x] Rotas, controllers e services separados
+- [x] Error handling central em `middlewares/error_handler.py`
+- [x] Entry point claro (`app.py` como composition root)
+- [x] Smoke test embarcado em `tests/test_smoke.py`
+- [x] Endpoints originais preservados, incluindo `/admin/*`, agora protegidos
+
+### Projeto 2 — ecommerce-api-legacy (Node.js/Express, SQLite cru)
+
+Refatorado e commitado (`bbe8f39`).
+
+| Antes | Depois |
+|---|---|
+| 3 arquivos em `src/`, ~180 LOC, `AppManager` concentrando banco, rotas e regras de negócio | MVC em camadas: `config/ models/ repositories/ services/ controllers/ routes/ middlewares/ security/ database/` + `test/` |
+| credenciais hardcoded, cartão e chave de pagamento em log, senha em plaintext/hash caseiro, rotas administrativas sem auth | config via env, logs sem dados sensíveis, hash `scrypt` com salt, relatório e exclusão atrás de autenticação admin |
+| callbacks aninhados, relatório com N+1, conexão concreta dentro do God Class, sem integridade referencial | `async/await`, query set-based paginada, dependências injetadas, transações serializadas e foreign keys com cascade |
+
+#### Auditoria da fase 2
+
+O relatório é exibido na sessão (read-only; por decisão de design não é persistido em disco).
+Foram encontrados 18 findings: 4 CRITICAL, 5 HIGH, 5 MEDIUM, 3 LOW e 1 API deprecated, alinhados à
+[análise manual](refinement/phase1-project-2.md).
+
+#### Validação da fase 3
+
+- [x] Estrutura em camadas MVC
+- [x] Configuração extraída para `config/`, sem segredos hardcoded
+- [x] Models, repositories e services separados
+- [x] Rotas e controllers sem lógica de negócio ou acesso direto ao banco
+- [x] Error handling central em `middlewares/errorHandler.js`
+- [x] Entry point claro (`src/app.js` como composition root)
+- [x] Testes de rota embarcados em `test/routes.test.js`
+- [x] Endpoints originais preservados; relatório e exclusão agora protegidos por `ADMIN_TOKEN`
+- [x] Format, lint, build, testes e `npm audit` verdes
+
+### Projeto 3 — task-manager-api (Python/Flask, SQLAlchemy)
+
+Refatorado e commitado (`b082b95`).
+
+| Antes | Depois |
+|---|---|
+| 15 arquivos, ~1.158 LOC, separação nominal em `models/ routes/ services/ utils/`, com regras e acesso ao banco concentrados nas rotas | MVC em camadas: `config/ models/ repositories/ services/ controllers/ routes/ middlewares/` + `tests/` |
+| segredo e credencial SMTP hardcoded, senha com MD5, hash exposto na API, token previsível e mutações sem autorização | config via env, hash salgado do Werkzeug, DTOs sem senha, token assinado e operações de escrita protegidas por autenticação admin |
+| N+1, validação duplicada, APIs deprecated, listas sem paginação e camadas mortas | eager loading e agregações SQL, schemas Marshmallow, APIs atuais do SQLAlchemy, paginação e dependências injetadas |
+
+#### Auditoria da fase 2
+
+O relatório é exibido na sessão (read-only; por decisão de design não é persistido em disco).
+Foram encontrados 16 findings: 3 CRITICAL, 4 HIGH, 5 MEDIUM, 2 LOW e 2 APIs deprecated, alinhados à
+[análise manual](refinement/phase1-project-3.md).
+
+#### Validação da fase 3
+
+- [x] Estrutura em camadas MVC
+- [x] Configuração extraída para `config.py` e `.env.example`, sem segredos hardcoded
+- [x] Models, repositories e services separados
+- [x] Rotas e controllers sem lógica de negócio ou acesso direto ao banco
+- [x] Validação centralizada com schemas Marshmallow
+- [x] Error handling central em `errors.py`
+- [x] Entry point claro (`app.py` como composition root)
+- [x] Testes de rota embarcados em `tests/test_api.py`
+- [x] 22 endpoints originais preservados; operações de escrita agora exigem token de administrador
+- [x] Format, lint, compile, testes e verificação in-process verdes
+
+## Como Executar
+
+### Pré-requisitos
+
+- Claude Code instalado
+- Python 3 e [`uv`](https://docs.astral.sh/uv/) (ou `pip`) para os projetos Flask
+- Node 18+ para o projeto Express
+
+### Rodar a skill
+
+### Projeto 1 - Code Smells Project
+
+A partir da raiz de cada projeto:
+
+```bash
+cd code-smells-project
+claude "/refactor-arch"
+```
+
+O fluxo passa pela fase 1 (análise, read-only), pela fase 2 (auditoria, read-only) e pelo gate
+`Phase 2 complete. Proceed with refactoring (Phase 3)? [y/n]`. Responda `y` para iniciar a fase 3,
+que refatora de forma autônoma até a verificação passar. A pasta `.claude/` é a mesma nos três
+projetos via symlink, então o comando não muda entre eles.
+
+#### Subir o projeto refatorado
+
+```bash
+cd code-smells-project
+uv venv
+uv pip install -r requirements.txt
+uv run python app.py          # http://localhost:5000  (cria e popula loja.db no boot)
+```
+
+Segredos vêm do ambiente (`SECRET_KEY`, `DB_PATH`), com fallback de desenvolvimento.
+
+#### Validar
+
+A fase 3 roda format, lint e testes e verifica as rotas in-process. Para conferir à mão, rode o
+smoke test embarcado:
+
+```bash
+uv run python -m pytest tests/
+```
+
+### Projeto 2 - Ecommerce API Legacy
+
+A partir da raiz do projeto:
+
+```bash
+cd ecommerce-api-legacy
+claude "/refactor-arch"
+```
+
+O fluxo é o mesmo: análise e auditoria read-only, gate de confirmação e fase 3 autônoma. A skill
+detecta Node.js, Express e SQLite, preserva as três rotas originais e protege as operações
+administrativas no lugar, sem reduzir a superfície da API.
+
+#### Subir o projeto refatorado
+
+```bash
+cd ecommerce-api-legacy
+npm install
+ADMIN_TOKEN=dev-admin-token npm start    # http://localhost:3000
+```
+
+`PORT`, `DATABASE_FILENAME` e `ADMIN_TOKEN` vêm do ambiente. Sem `ADMIN_TOKEN`, a aplicação inicia,
+mas as rotas administrativas respondem `503` até que a credencial seja configurada.
+
+#### Validar
+
+A fase 3 roda Prettier, ESLint, verificação de sintaxe, testes de rota in-process e auditoria de
+dependências. Para repetir a validação:
+
+```bash
+npm run format:check
+npm run lint
+npm run build
+npm test
+npm audit --audit-level=low
+```
+
+### Projeto 3 - Task Manager API
+
+A partir da raiz do projeto:
+
+```bash
+cd task-manager-api
+claude "/refactor-arch"
+```
+
+O fluxo é o mesmo: análise e auditoria read-only, gate de confirmação e fase 3 autônoma. A skill
+detecta Python, Flask e SQLAlchemy, preserva os 22 endpoints originais e reorganiza a separação
+parcial existente em camadas com responsabilidades e dependências explícitas.
+
+#### Subir o projeto refatorado
+
+```bash
+cd task-manager-api
+cp .env.example .env         # defina SECRET_KEY e SEED_ADMIN_PASSWORD
+uv venv
+uv pip install -r requirements.txt
+uv run python seed.py
+uv run python app.py         # http://localhost:5000
+```
+
+As operações de escrita exigem `Authorization: Bearer <token>` de administrador. O seed cria
+`joao@email.com`; use `SEED_ADMIN_PASSWORD` para autenticar em `POST /login` e obter o token
+assinado.
+
+#### Validar
+
+A fase 3 roda Ruff, compilação, testes e verificação das rotas com o test client do Flask. Para
+repetir a validação:
+
+```bash
+uv pip install -r requirements-dev.txt
+uv run ruff format --check .
+uv run ruff check .
+uv run python -m compileall -q .
+uv run pytest -q
+uv run python verify_routes.py
+```
