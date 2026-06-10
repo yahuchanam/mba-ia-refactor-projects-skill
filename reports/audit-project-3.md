@@ -108,5 +108,3 @@ Total: 15 findings
 ================================
 Total: 15 findings
 ================================
-
-Read-only report captured before Phase 3; no target-project file was modified by the audit.

@@ -119,5 +119,3 @@ No framework or library API definitively deprecated for the declared dependency 
 ================================
 Total: 15 findings
 ================================
-
-Read-only report captured before Phase 3; no target-project file was modified by the audit.

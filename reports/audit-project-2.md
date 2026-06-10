@@ -113,5 +113,3 @@ No API definitively deprecated for Express 4.18.2 or sqlite3 5.1.6 was found.
 ================================
 Total: 14 findings
 ================================
-
-Read-only report captured before Phase 3; no target-project file was modified by the audit.

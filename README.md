@@ -450,7 +450,7 @@ A skill deve atingir os seguintes mínimos em **todos os 3 projetos**:
 
 # Resolução do desafio
 
-A primeira parte do desafio analisai todos os projetos, um por vez, registrando e classificando os problemas.
+A primeira parte do desafio analisou todos os projetos, um por vez, registrando e classificando os problemas.
 
 ## Análise Manual
 
@@ -465,6 +465,74 @@ arquitetura atual e catálogo de anti-patterns com severidade e `arquivo:linha`.
 
 ## Construção da Skill
 
+A skill `refactor-arch` implementa três fases sequenciais:
+
+1. **Análise read-only:** detecta stack, persistência, arquitetura, entidades e superfície de rotas.
+2. **Auditoria read-only:** cruza o código com o catálogo de anti-patterns, gera achados com `arquivo:linha` e pausa no gate HITL.
+3. **Refatoração autônoma:** após aprovação, migra para MVC, corrige segurança e valida formato, lint, testes e endpoints.
+
+O `SKILL.md` funciona como mapa e carrega sob demanda:
+
+- `references/`: catálogo de anti-patterns, princípios arquiteturais, template de relatório e playbook.
+- `rules/stacks/`: comandos e validações para Python, Node.js, Go, Ruby, PHP, JVM e .NET.
+- `rules/execution-conventions.md`: execução in-process e regras de segurança.
+- `scripts/safe_remove.py`: remoção limitada ao diretório do projeto, com dry-run obrigatório.
+
+Para atender ao requisito de portabilidade, cada projeto contém cópias físicas e autocontidas em
+`.claude/skills/refactor-arch/` e `.codex/skills/refactor-arch/`. Não são symlinks.
+
 ## Resultados
 
+| Projeto | Auditoria | Refatoração e validação |
+|---|---|---|
+| `code-smells-project` | [15 achados](reports/audit-project-1.md) | MVC em camadas; 28 checks de endpoints e segurança aprovados |
+| `ecommerce-api-legacy` | [14 achados](reports/audit-project-2.md) | MVC em camadas; Prettier, ESLint, build e 5 testes aprovados com Node.js 20 |
+| `task-manager-api` | [15 achados](reports/audit-project-3.md) | MVC em camadas; Ruff, Pytest e 22 endpoints verificados em 24 respostas |
+
+Os relatórios foram capturados após a Fase 2 e antes de qualquer alteração do respectivo projeto.
+As refatorações preservam todas as rotas originais e protegem operações administrativas com
+autenticação e autorização.
+
 ## Como Executar
+
+Invoque a skill a partir do diretório de cada projeto:
+
+```bash
+cd code-smells-project
+claude "/refactor-arch"
+
+cd ../ecommerce-api-legacy
+claude "/refactor-arch"
+
+cd ../task-manager-api
+claude "/refactor-arch"
+```
+
+No Codex, invoque `$refactor-arch` no diretório correspondente.
+
+Validação manual das versões refatoradas:
+
+```bash
+# Projeto 1
+cd code-smells-project
+uv venv
+uv pip install -r requirements.txt
+uv run python tests/test_smoke.py
+
+# Projeto 2 — requer Node.js >= 20.19
+cd ../ecommerce-api-legacy
+npm install
+npm run format:check
+npm run lint
+npm run build
+npm test
+
+# Projeto 3
+cd ../task-manager-api
+uv venv
+uv pip install -r requirements-dev.txt
+uv run ruff format --check .
+uv run ruff check .
+uv run pytest -q
+uv run python verify_routes.py
+```
