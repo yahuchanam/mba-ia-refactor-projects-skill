@@ -1,88 +1,95 @@
-from flask import Flask, jsonify, request
+"""Composition root: builds the dependency graph and wires the layers together.
+
+Flow: routes → controllers → services → repositories → models.
+config and middlewares are cross-cutting.
+"""
+
+from flask import Flask
 from flask_cors import CORS
-import controllers
-from database import get_db
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = "minha-chave-super-secreta-123"
-app.config["DEBUG"] = True
-CORS(app)
+from config import settings
+from controllers.admin_controller import AdminController
+from controllers.auth_controller import AuthController
+from controllers.meta_controller import MetaController
+from controllers.pedido_controller import PedidoController
+from controllers.produto_controller import ProdutoController
+from controllers.relatorio_controller import RelatorioController
+from controllers.usuario_controller import UsuarioController
+from middlewares.auth import make_require_auth
+from middlewares.error_handler import register_error_handlers
+from repositories.database import Database
+from repositories.pedido_repository import PedidoRepository
+from repositories.produto_repository import ProdutoRepository
+from repositories.seed import seed
+from repositories.usuario_repository import UsuarioRepository
+from routes import register_routes
+from services.admin_service import AdminService
+from services.auth_controller_service import LoginService
+from services.auth_service import AuthService
+from services.notification_service import NotificationService
+from services.pedido_service import PedidoService
+from services.produto_service import ProdutoService
+from services.relatorio_service import RelatorioService
+from services.usuario_service import UsuarioService
+from utils.logger import get_logger
 
-app.add_url_rule("/produtos", "listar_produtos", controllers.listar_produtos, methods=["GET"])
-app.add_url_rule("/produtos/busca", "buscar_produtos", controllers.buscar_produtos, methods=["GET"])
-app.add_url_rule("/produtos/<int:id>", "buscar_produto", controllers.buscar_produto, methods=["GET"])
-app.add_url_rule("/produtos", "criar_produto", controllers.criar_produto, methods=["POST"])
-app.add_url_rule("/produtos/<int:id>", "atualizar_produto", controllers.atualizar_produto, methods=["PUT"])
-app.add_url_rule("/produtos/<int:id>", "deletar_produto", controllers.deletar_produto, methods=["DELETE"])
 
-app.add_url_rule("/usuarios", "listar_usuarios", controllers.listar_usuarios, methods=["GET"])
-app.add_url_rule("/usuarios/<int:id>", "buscar_usuario", controllers.buscar_usuario, methods=["GET"])
-app.add_url_rule("/usuarios", "criar_usuario", controllers.criar_usuario, methods=["POST"])
-app.add_url_rule("/login", "login", controllers.login, methods=["POST"])
+def create_app() -> Flask:
+    app = Flask(__name__)
+    app.config["SECRET_KEY"] = settings.SECRET_KEY
+    app.config["DEBUG"] = settings.DEBUG
+    CORS(app, origins=settings.CORS_ORIGINS)
 
-app.add_url_rule("/pedidos", "criar_pedido", controllers.criar_pedido, methods=["POST"])
-app.add_url_rule("/pedidos", "listar_todos_pedidos", controllers.listar_todos_pedidos, methods=["GET"])
-app.add_url_rule("/pedidos/usuario/<int:usuario_id>", "listar_pedidos_usuario", controllers.listar_pedidos_usuario, methods=["GET"])
-app.add_url_rule("/pedidos/<int:pedido_id>/status", "atualizar_status_pedido", controllers.atualizar_status_pedido, methods=["PUT"])
+    # Infrastructure
+    db = Database(settings.DB_PATH)
+    app.teardown_appcontext(db.close)
 
-app.add_url_rule("/relatorios/vendas", "relatorio_vendas", controllers.relatorio_vendas, methods=["GET"])
+    # Repositories
+    produto_repo = ProdutoRepository(db)
+    usuario_repo = UsuarioRepository(db)
+    pedido_repo = PedidoRepository(db)
 
-app.add_url_rule("/health", "health_check", controllers.health_check, methods=["GET"])
+    # Services
+    auth_service = AuthService(
+        usuario_repo, settings.SECRET_KEY, settings.TOKEN_MAX_AGE
+    )
+    notifications = NotificationService()
+    produto_service = ProdutoService(produto_repo, db)
+    usuario_service = UsuarioService(usuario_repo, auth_service, db)
+    pedido_service = PedidoService(pedido_repo, produto_repo, notifications, db)
+    relatorio_service = RelatorioService(pedido_repo)
+    admin_service = AdminService(db)
+    login_service = LoginService(auth_service)
 
-@app.route("/")
-def index():
-    return jsonify({
-        "mensagem": "Bem-vindo à API da Loja",
-        "versao": "1.0.0",
-        "endpoints": {
-            "produtos": "/produtos",
-            "usuarios": "/usuarios",
-            "pedidos": "/pedidos",
-            "login": "/login",
-            "relatorios": "/relatorios/vendas",
-            "health": "/health"
-        }
-    })
+    # Controllers
+    controllers = {
+        "meta": MetaController(db),
+        "produto": ProdutoController(produto_service),
+        "usuario": UsuarioController(usuario_service),
+        "auth": AuthController(login_service),
+        "pedido": PedidoController(pedido_service),
+        "relatorio": RelatorioController(relatorio_service),
+        "admin": AdminController(admin_service),
+    }
 
-@app.route("/admin/reset-db", methods=["POST"])
-def reset_database():
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("DELETE FROM itens_pedido")
-    cursor.execute("DELETE FROM pedidos")
-    cursor.execute("DELETE FROM produtos")
-    cursor.execute("DELETE FROM usuarios")
-    db.commit()
-    print("!!! BANCO DE DADOS RESETADO !!!")
-    return jsonify({"mensagem": "Banco de dados resetado", "sucesso": True}), 200
+    # Cross-cutting + routes
+    require_auth = make_require_auth(auth_service)
+    register_routes(app, controllers, require_auth)
+    register_error_handlers(app)
 
-@app.route("/admin/query", methods=["POST"])
-def executar_query():
-    dados = request.get_json()
-    query = dados.get("sql", "")
-    if not query:
-        return jsonify({"erro": "Query não informada"}), 400
+    # Schema + seed (idempotent), inside an application context so `g` is available
+    with app.app_context():
+        db.init_schema()
+        seed(db, produto_repo, usuario_repo, auth_service)
 
-    db = get_db()
-    cursor = db.cursor()
-    try:
-        cursor.execute(query)
-        if query.strip().upper().startswith("SELECT"):
-            rows = cursor.fetchall()
-            result = [dict(row) for row in rows]
-            return jsonify({"dados": result, "sucesso": True}), 200
-        else:
-            db.commit()
-            return jsonify({"mensagem": "Query executada", "sucesso": True}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    return app
+
+
+app = create_app()
 
 if __name__ == "__main__":
-
-    get_db()
-    print("=" * 50)
-    print("SERVIDOR INICIADO")
-    print("Rodando em http://localhost:5000")
-    print("=" * 50)
-
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    log = get_logger("app")
+    log.info("=" * 50)
+    log.info("SERVIDOR INICIADO — http://localhost:%s", settings.PORT)
+    log.info("=" * 50)
+    app.run(host=settings.HOST, port=settings.PORT, debug=settings.DEBUG)
