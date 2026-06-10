@@ -1,0 +1,6 @@
+interface:
+  display_name: "Refactor Arch"
+  short_description: "Audit and refactor legacy APIs to MVC"
+  default_prompt: "Use $refactor-arch to analyze this legacy backend, audit architectural risks, and pause before refactoring it to MVC."
+policy:
+  allow_implicit_invocation: true
